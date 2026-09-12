@@ -331,4 +331,26 @@ class AppLocalizationsSi extends AppLocalizations {
   @override
   String get backendConfigMessage =>
       'AWS outputs dart-defines ලෙස සපයා Android යෙදුම ක්‍රියාත්මක කරන්න.';
+
+  @override
+  String get navigating => 'මාර්ගගත වෙමින්...';
+
+  @override
+  String routeDistance(String distance) {
+    return 'කි.මී. $distance';
+  }
+
+  @override
+  String routeDuration(String minutes) {
+    return 'මිනි. $minutes';
+  }
+
+  @override
+  String get cancelNavigation => 'අවලංගු කරන්න';
+
+  @override
+  String get routeNotFound => 'ආරක්‍ෂිත ස්ථානයට මාර්ගයක් සොයා ගත නොහැක.';
+
+  @override
+  String get locationNeeded => 'මාර්ගය සඳහා වත්මන් ස්ථානය අවශ්‍යයි.';
 }

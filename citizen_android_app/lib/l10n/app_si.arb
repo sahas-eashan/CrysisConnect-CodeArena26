@@ -99,5 +99,11 @@
   "categoryShelter": "නවාතැන්",
   "retryMapLoad": "සිතියම නැවත පූරණය කරන්න",
   "backendConfigRequired": "Backend config අවශ්‍යයි",
-  "backendConfigMessage": "AWS outputs dart-defines ලෙස සපයා Android යෙදුම ක්‍රියාත්මක කරන්න."
+  "backendConfigMessage": "AWS outputs dart-defines ලෙස සපයා Android යෙදුම ක්‍රියාත්මක කරන්න.",
+  "navigating": "මාර්ගගත වෙමින්...",
+  "routeDistance": "කි.මී. {distance}",
+  "routeDuration": "මිනි. {minutes}",
+  "cancelNavigation": "අවලංගු කරන්න",
+  "routeNotFound": "ආරක්‍ෂිත ස්ථානයට මාර්ගයක් සොයා ගත නොහැක.",
+  "locationNeeded": "මාර්ගය සඳහා වත්මන් ස්ථානය අවශ්‍යයි."
 }

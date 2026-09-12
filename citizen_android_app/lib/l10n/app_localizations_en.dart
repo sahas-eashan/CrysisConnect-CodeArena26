@@ -332,4 +332,26 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get backendConfigMessage =>
       'Run the Android app with the deployed AWS outputs supplied as dart-defines.';
+
+  @override
+  String get navigating => 'Navigating...';
+
+  @override
+  String routeDistance(String distance) {
+    return '$distance km';
+  }
+
+  @override
+  String routeDuration(String minutes) {
+    return '$minutes min';
+  }
+
+  @override
+  String get cancelNavigation => 'Cancel';
+
+  @override
+  String get routeNotFound => 'Could not find a route to the safe zone.';
+
+  @override
+  String get locationNeeded => 'Current location is needed for routing.';
 }

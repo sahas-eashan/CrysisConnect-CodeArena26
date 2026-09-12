@@ -105,5 +105,13 @@
   "categoryShelter": "Shelter",
   "retryMapLoad": "Retry map load",
   "backendConfigRequired": "Backend config required",
-  "backendConfigMessage": "Run the Android app with the deployed AWS outputs supplied as dart-defines."
+  "backendConfigMessage": "Run the Android app with the deployed AWS outputs supplied as dart-defines.",
+  "navigating": "Navigating...",
+  "routeDistance": "{distance} km",
+  "@routeDistance": { "placeholders": { "distance": { "type": "String" } } },
+  "routeDuration": "{minutes} min",
+  "@routeDuration": { "placeholders": { "minutes": { "type": "String" } } },
+  "cancelNavigation": "Cancel",
+  "routeNotFound": "Could not find a route to the safe zone.",
+  "locationNeeded": "Current location is needed for routing."
 }
