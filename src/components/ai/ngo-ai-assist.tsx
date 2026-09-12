@@ -41,7 +41,7 @@ export function NgoSosAiAssist({ sosId }: { sosId?: string | null }) {
             Converts raw SOS signals into a severity, urgency, and responder recommendation package for operator review.
           </CardDescription>
         </div>
-        <Button disabled={!sosId || loading} onClick={() => void onAnalyze()}>
+        <Button className="rounded-full px-5 py-2.5 whitespace-nowrap" disabled={!sosId || loading} onClick={() => void onAnalyze()}>
           {loading ? "Analyzing..." : "Analyze SOS"}
         </Button>
       </div>
@@ -70,7 +70,17 @@ export function NgoSosAiAssist({ sosId }: { sosId?: string | null }) {
   );
 }
 
-export function NgoResourceAiAssist({ requestId }: { requestId?: string | null }) {
+export function NgoResourceAiAssist({
+  requestId,
+  requestSummary
+}: {
+  requestId?: string | null;
+  requestSummary?: {
+    resourceName: string;
+    quantityNeeded: number;
+    urgency: string;
+  } | null;
+}) {
   const [plan, setPlan] = useState<ResourceDispatchPlan | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -102,10 +112,19 @@ export function NgoResourceAiAssist({ requestId }: { requestId?: string | null }
             Suggests what to dispatch and what still needs human confirmation before field action.
           </CardDescription>
         </div>
-        <Button disabled={!requestId || loading} onClick={() => void onAnalyze()}>
+        <Button className="rounded-full px-5 py-2.5 whitespace-nowrap" disabled={!requestId || loading} onClick={() => void onAnalyze()}>
           {loading ? "Analyzing..." : "Analyze request"}
         </Button>
       </div>
+
+      {requestSummary ? (
+        <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3">
+          <p className="text-sm font-medium text-white">{requestSummary.resourceName}</p>
+          <p className="mt-1 text-xs text-muted">
+            Needs {requestSummary.quantityNeeded} units • {(requestSummary.urgency ?? "normal").toLowerCase()} priority
+          </p>
+        </div>
+      ) : null}
 
       {!requestId ? <p className="mt-4 text-sm text-muted">No live pending request is available to analyze yet.</p> : null}
       {error ? <p className="mt-4 text-sm text-danger">{error}</p> : null}

@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { useGeolocation } from "@/hooks/use-geolocation";
 import { configureAmplify } from "@/lib/aws/amplify";
 import { mutations, queries, subscriptions } from "@/lib/aws/graphql/operations";
-import type { Resource } from "@/lib/types";
+import type { Resource, ResourceRequest } from "@/lib/types";
 import { cn, toTitleCase } from "@/lib/utils";
 
 type ResourceFormState = {
@@ -21,6 +21,24 @@ type ResourceFormState = {
   unit: string;
   location: string;
 };
+
+function sortRequests(requests: ResourceRequest[]) {
+  const priorityWeight: Record<string, number> = {
+    critical: 0,
+    high: 1,
+    urgent: 1,
+    normal: 2,
+    medium: 3,
+    low: 4
+  };
+
+  return [...requests].sort((left, right) => {
+    const leftPriority = priorityWeight[left.urgency?.toLowerCase() ?? "normal"] ?? 4;
+    const rightPriority = priorityWeight[right.urgency?.toLowerCase() ?? "normal"] ?? 4;
+    if (leftPriority !== rightPriority) return leftPriority - rightPriority;
+    return (right.createdAt ?? "").localeCompare(left.createdAt ?? "");
+  });
+}
 
 const defaultForm: ResourceFormState = {
   name: "",
@@ -66,6 +84,7 @@ function normalizeLocationInput(value: string) {
 export default function NgoResourcesPage() {
   const hasAwsConfig = Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL);
   const [resources, setResources] = useState<Resource[]>([]);
+  const [requests, setRequests] = useState<ResourceRequest[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL));
@@ -99,15 +118,25 @@ export default function NgoResourcesPage() {
       setError(null);
 
       try {
-        const resourceResult = await client.graphql({ query: queries.getResources });
+        const [resourceResult, requestResult] = await Promise.all([
+          client.graphql({ query: queries.getResources }),
+          client.graphql({
+            query: queries.getResourceRequests,
+            authMode: "userPool",
+            variables: { status: "pending" }
+          })
+        ]);
 
         if (!active) return;
 
         const nextResources = ((resourceResult as any).data?.getResources ?? []) as Resource[];
+        const nextRequests = ((requestResult as any).data?.getResourceRequests ?? []) as ResourceRequest[];
         setResources(nextResources);
+        setRequests(sortRequests(nextRequests));
       } catch (loadError) {
         if (!active) return;
         setResources([]);
+        setRequests([]);
         setError(loadError instanceof Error ? loadError.message : "Unable to load NGO resource data.");
       } finally {
         if (active) {
@@ -144,6 +173,8 @@ export default function NgoResourcesPage() {
       })
     }));
   }, [coordinates]);
+
+  const pendingRequest = requests.find((request) => (request.status ?? "pending").toLowerCase() !== "fulfilled") ?? null;
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -192,7 +223,18 @@ export default function NgoResourcesPage() {
 
   return (
     <div className="space-y-6">
-      <NgoResourceAiAssist />
+      <NgoResourceAiAssist
+        requestId={pendingRequest?.id}
+        requestSummary={
+          pendingRequest
+            ? {
+                resourceName: pendingRequest.resourceName ?? "Unnamed request",
+                quantityNeeded: pendingRequest.quantityNeeded ?? 0,
+                urgency: pendingRequest.urgency ?? "normal"
+              }
+            : null
+        }
+      />
 
       <div className="grid gap-6 xl:grid-cols-[1fr_0.95fr]">
         <Card>
@@ -326,7 +368,7 @@ export default function NgoResourcesPage() {
               </p>
             ) : null}
             <div className="flex flex-wrap items-center gap-3">
-              <Button onClick={requestLocation} type="button" variant="outline">
+              <Button className="rounded-full" onClick={requestLocation} type="button" variant="outline">
                 {locationLoading ? "Getting location..." : "Get current location"}
               </Button>
               {coordinates ? (
@@ -336,7 +378,7 @@ export default function NgoResourcesPage() {
               ) : null}
             </div>
             {locationError ? <p className="text-sm text-danger">{locationError}</p> : null}
-            <Button className="w-full" disabled={savingResource} type="submit">
+            <Button className="w-full rounded-full" disabled={savingResource} type="submit">
               {savingResource ? "Saving..." : "Save resource update"}
             </Button>
           </form>
