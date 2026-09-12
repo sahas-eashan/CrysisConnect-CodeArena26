@@ -14,6 +14,6 @@ export default defineConfig({
     url: "http://127.0.0.1:3100",
     reuseExistingServer: false,
     timeout: 120_000,
-    env: { HAZARD_DEMO_MODE: "true", HAZARD_STORE_PATH: `.data/e2e-${Date.now()}.json`, DATABASE_URL: "", GEMINI_API_KEY: "", GOOGLE_API_KEY: "", NEXT_PUBLIC_COGNITO_USER_POOL_ID: "", NEXT_PUBLIC_APPSYNC_GRAPHQL_URL: "" }
+    env: { HAZARD_DEMO_MODE: "true", HAZARD_STORE_PATH: `.data/e2e-${Date.now()}.json`, DATABASE_URL: "", GEMINI_API_KEY: "", GOOGLE_API_KEY: "", NEXT_PUBLIC_COGNITO_USER_POOL_ID: "", NEXT_PUBLIC_APPSYNC_GRAPHQL_URL: "", OSRM_BASE_URL: "http://127.0.0.1:1", HAZARD_GEOGRAPHY_JSON: "", HAZARD_GEOGRAPHY_FILE: "" }
   }
 });
