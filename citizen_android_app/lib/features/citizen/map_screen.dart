@@ -32,6 +32,9 @@ class _RouteInfo {
 }
 
 class _MapScreenState extends State<MapScreen> {
+  static const double _markerWidth = 104;
+  static const double _markerHeight = 82;
+
   late Future<MapBundle> _future;
   final MapController _mapController = MapController();
   String _filter = 'all';
@@ -232,8 +235,8 @@ class _MapScreenState extends State<MapScreen> {
                 .map(
                   (zone) => Marker(
                     point: zone.locationPoint!.latLng,
-                    width: 88,
-                    height: 70,
+                    width: _MapScreenState._markerWidth,
+                    height: _MapScreenState._markerHeight,
                     child: _MapMarker(
                       color: AppColors.tertiary,
                       icon: Icons.home_rounded,
@@ -247,8 +250,8 @@ class _MapScreenState extends State<MapScreen> {
                 .map(
                   (resource) => Marker(
                     point: resource.locationPoint!.latLng,
-                    width: 90,
-                    height: 70,
+                    width: _MapScreenState._markerWidth,
+                    height: _MapScreenState._markerHeight,
                     child: _MapMarker(
                       color: AppColors.primary,
                       icon: Icons.inventory_2_rounded,
