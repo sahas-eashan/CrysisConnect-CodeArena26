@@ -1,5 +1,6 @@
 import 'package:crisisconnect_citizen/core/backend.dart';
 import 'package:crisisconnect_citizen/features/citizen/citizen_shell.dart';
+import 'package:crisisconnect_citizen/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 
 class AuthGate extends StatefulWidget {
@@ -55,7 +56,10 @@ class _AuthGateState extends State<AuthGate> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const _LoadingScaffold(message: 'Connecting to CrisisConnect...');
+      final l10n = AppLocalizations.of(context);
+      return _LoadingScaffold(
+        message: l10n?.connectingMessage ?? 'Connecting to CrisisConnect...',
+      );
     }
 
     if (!_session.isConfigured) {
@@ -229,22 +233,20 @@ class _AuthScreenState extends State<AuthScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
     final title = switch (_mode) {
-      _AuthMode.signIn => 'Citizen Sign In',
-      _AuthMode.signUp => 'Create Citizen Account',
-      _AuthMode.confirm => 'Confirm Registration',
-      _AuthMode.newPassword => 'Set A New Password',
+      _AuthMode.signIn => l10n.signInTitle,
+      _AuthMode.signUp => l10n.signUpTitle,
+      _AuthMode.confirm => l10n.confirmTitle,
+      _AuthMode.newPassword => l10n.newPasswordTitle,
     };
 
     final description = switch (_mode) {
-      _AuthMode.signIn =>
-        'Authenticate directly against the provisioned Cognito user pool and fetch live incident data from AppSync.',
-      _AuthMode.signUp =>
-        'Citizens can self-register with email. After confirmation, the mobile app uses the same AWS backend as the web portal.',
-      _AuthMode.confirm =>
-        'Enter the confirmation code sent by Cognito, then sign in to start using live disaster data.',
-      _AuthMode.newPassword =>
-        'This Cognito account was created with a temporary password. Set a permanent password to finish the first sign-in.',
+      _AuthMode.signIn => l10n.signInDesc,
+      _AuthMode.signUp => l10n.signUpDesc,
+      _AuthMode.confirm => l10n.confirmDesc,
+      _AuthMode.newPassword => l10n.newPasswordDesc,
     };
 
     return Scaffold(
@@ -304,9 +306,9 @@ class _AuthScreenState extends State<AuthScreen> {
                       TextField(
                         controller: _nameController,
                         textCapitalization: TextCapitalization.words,
-                        decoration: const InputDecoration(
-                          labelText: 'Full name',
-                          prefixIcon: Icon(Icons.person_outline_rounded),
+                        decoration: InputDecoration(
+                          labelText: l10n.fullName,
+                          prefixIcon: const Icon(Icons.person_outline_rounded),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -316,9 +318,9 @@ class _AuthScreenState extends State<AuthScreen> {
                       TextField(
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
-                        decoration: const InputDecoration(
-                          labelText: 'Email',
-                          prefixIcon: Icon(Icons.email_outlined),
+                        decoration: InputDecoration(
+                          labelText: l10n.emailLabel,
+                          prefixIcon: const Icon(Icons.email_outlined),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -327,9 +329,9 @@ class _AuthScreenState extends State<AuthScreen> {
                       TextField(
                         controller: _phoneController,
                         keyboardType: TextInputType.phone,
-                        decoration: const InputDecoration(
-                          labelText: 'Phone number',
-                          prefixIcon: Icon(Icons.phone_outlined),
+                        decoration: InputDecoration(
+                          labelText: l10n.phoneNumber,
+                          prefixIcon: const Icon(Icons.phone_outlined),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -338,27 +340,27 @@ class _AuthScreenState extends State<AuthScreen> {
                       TextField(
                         controller: _codeController,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Confirmation code',
-                          prefixIcon: Icon(Icons.verified_outlined),
+                        decoration: InputDecoration(
+                          labelText: l10n.confirmationCode,
+                          prefixIcon: const Icon(Icons.verified_outlined),
                         ),
                       )
                     else if (_mode == _AuthMode.newPassword)
                       TextField(
                         controller: _newPasswordController,
                         obscureText: true,
-                        decoration: const InputDecoration(
-                          labelText: 'New password',
-                          prefixIcon: Icon(Icons.lock_reset_rounded),
+                        decoration: InputDecoration(
+                          labelText: l10n.newPassword,
+                          prefixIcon: const Icon(Icons.lock_reset_rounded),
                         ),
                       )
                     else
                       TextField(
                         controller: _passwordController,
                         obscureText: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Password',
-                          prefixIcon: Icon(Icons.lock_outline_rounded),
+                        decoration: InputDecoration(
+                          labelText: l10n.passwordLabel,
+                          prefixIcon: const Icon(Icons.lock_outline_rounded),
                         ),
                       ),
                     const SizedBox(height: 16),
@@ -376,12 +378,13 @@ class _AuthScreenState extends State<AuthScreen> {
                               },
                         child: Text(
                           _busy
-                              ? 'Please wait...'
+                              ? l10n.pleaseWait
                               : switch (_mode) {
-                                  _AuthMode.signIn => 'Sign in',
-                                  _AuthMode.signUp => 'Create account',
-                                  _AuthMode.confirm => 'Confirm registration',
-                                  _AuthMode.newPassword => 'Save new password',
+                                  _AuthMode.signIn => l10n.signInButton,
+                                  _AuthMode.signUp => l10n.signUpButton,
+                                  _AuthMode.confirm => l10n.confirmButton,
+                                  _AuthMode.newPassword =>
+                                    l10n.savePasswordButton,
                                 },
                         ),
                       ),
@@ -397,9 +400,7 @@ class _AuthScreenState extends State<AuthScreen> {
                                   _error = null;
                                   _message = null;
                                 }),
-                          child: const Text(
-                            'Need an account? Register as a citizen',
-                          ),
+                          child: Text(l10n.needAccount),
                         ),
                       )
                     else
@@ -414,8 +415,8 @@ class _AuthScreenState extends State<AuthScreen> {
                                 }),
                           child: Text(
                             _mode == _AuthMode.newPassword
-                                ? 'Start sign in again'
-                                : 'Back to sign in',
+                                ? l10n.startSignInAgain
+                                : l10n.backToSignIn,
                           ),
                         ),
                       ),
@@ -455,6 +456,7 @@ class _MissingConfigScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -473,7 +475,7 @@ class _MissingConfigScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Backend config required',
+                      l10n.backendConfigRequired,
                       style: Theme.of(context).textTheme.headlineSmall
                           ?.copyWith(
                             color: AppColors.primary,
@@ -482,7 +484,7 @@ class _MissingConfigScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Run the Android app with the deployed AWS outputs supplied as dart-defines.',
+                      l10n.backendConfigMessage,
                       style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         color: AppColors.surfaceVariantText,
                       ),
@@ -535,6 +537,7 @@ class _ErrorScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       body: Center(
         child: Padding(
@@ -556,7 +559,7 @@ class _ErrorScaffold extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
                 const SizedBox(height: 16),
-                FilledButton(onPressed: onRetry, child: const Text('Retry')),
+                FilledButton(onPressed: onRetry, child: Text(l10n.retry)),
               ],
             ),
           ),

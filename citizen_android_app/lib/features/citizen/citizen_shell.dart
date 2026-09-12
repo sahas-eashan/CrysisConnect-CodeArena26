@@ -4,6 +4,7 @@ import 'package:crisisconnect_citizen/features/citizen/dashboard_screen.dart';
 import 'package:crisisconnect_citizen/features/citizen/map_screen.dart';
 import 'package:crisisconnect_citizen/features/citizen/resources_screen.dart';
 import 'package:crisisconnect_citizen/features/citizen/sos_screen.dart';
+import 'package:crisisconnect_citizen/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 
 class CitizenShell extends StatefulWidget {
@@ -54,7 +55,7 @@ class _CitizenShellState extends State<CitizenShell> {
               ),
               const SizedBox(height: 20),
               Text(
-                'Select Language / භාෂාව තෝරන්න',
+                AppLocalizations.of(context)!.selectLanguage,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w800,
                     ),
@@ -150,7 +151,7 @@ class _CitizenShellState extends State<CitizenShell> {
                                 ),
                           ),
                           Text(
-                            widget.session.username ?? 'Citizen access',
+                            widget.session.username ?? AppLocalizations.of(context)!.citizenAccess,
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(color: AppColors.outline),
                           ),
@@ -165,14 +166,14 @@ class _CitizenShellState extends State<CitizenShell> {
                           _showLanguagePicker(context);
                         }
                       },
-                      itemBuilder: (context) => const [
+                      itemBuilder: (ctx) => [
                         PopupMenuItem<String>(
                           value: 'language',
                           child: Row(
                             children: [
-                              Icon(Icons.language_rounded, size: 20),
-                              SizedBox(width: 8),
-                              Text('Language / භාෂාව'),
+                              const Icon(Icons.language_rounded, size: 20),
+                              const SizedBox(width: 8),
+                              Text(AppLocalizations.of(ctx)!.languageLabel),
                             ],
                           ),
                         ),
@@ -180,9 +181,9 @@ class _CitizenShellState extends State<CitizenShell> {
                           value: 'logout',
                           child: Row(
                             children: [
-                              Icon(Icons.logout_rounded, size: 20),
-                              SizedBox(width: 8),
-                              Text('Sign out'),
+                              const Icon(Icons.logout_rounded, size: 20),
+                              const SizedBox(width: 8),
+                              Text(AppLocalizations.of(ctx)!.signOut),
                             ],
                           ),
                         ),
@@ -236,25 +237,25 @@ class _CitizenShellState extends State<CitizenShell> {
             children: [
               _NavButton(
                 icon: Icons.home_rounded,
-                label: 'Home',
+                label: AppLocalizations.of(context)!.navHome,
                 selected: _currentIndex == 0,
                 onTap: () => setState(() => _currentIndex = 0),
               ),
               _NavButton(
                 icon: Icons.explore_rounded,
-                label: 'Map',
+                label: AppLocalizations.of(context)!.navMap,
                 selected: _currentIndex == 1,
                 onTap: () => setState(() => _currentIndex = 1),
               ),
               _NavButton(
                 icon: Icons.emergency_rounded,
-                label: 'SOS',
+                label: AppLocalizations.of(context)!.navSos,
                 selected: _currentIndex == 2,
                 onTap: () => setState(() => _currentIndex = 2),
               ),
               _NavButton(
                 icon: Icons.inventory_2_rounded,
-                label: 'Resources',
+                label: AppLocalizations.of(context)!.navResources,
                 selected: _currentIndex == 3,
                 onTap: () => setState(() => _currentIndex = 3),
               ),

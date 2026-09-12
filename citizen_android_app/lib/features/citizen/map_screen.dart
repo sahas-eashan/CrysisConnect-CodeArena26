@@ -1,4 +1,5 @@
 import 'package:crisisconnect_citizen/core/backend.dart';
+import 'package:crisisconnect_citizen/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -44,7 +45,7 @@ class _MapScreenState extends State<MapScreen> {
               padding: const EdgeInsets.all(24),
               child: FilledButton(
                 onPressed: _refresh,
-                child: Text('Retry map load\n${snapshot.error}'),
+                child: Text('${AppLocalizations.of(context)!.retryMapLoad}\n${snapshot.error}'),
               ),
             ),
           );
@@ -174,24 +175,24 @@ class _MapScreenState extends State<MapScreen> {
                         child: Row(
                           children: [
                             _FilterChip(
-                              label: 'All',
+                              label: AppLocalizations.of(context)!.filterAll,
                               active: _filter == 'all',
                               onTap: () => setState(() => _filter = 'all'),
                             ),
                             _FilterChip(
-                              label: 'Safe Zones',
+                              label: AppLocalizations.of(context)!.filterSafeZones,
                               active: _filter == 'safeZones',
                               onTap: () =>
                                   setState(() => _filter = 'safeZones'),
                             ),
                             _FilterChip(
-                              label: 'Disasters',
+                              label: AppLocalizations.of(context)!.filterDisasters,
                               active: _filter == 'disasters',
                               onTap: () =>
                                   setState(() => _filter = 'disasters'),
                             ),
                             _FilterChip(
-                              label: 'Resources',
+                              label: AppLocalizations.of(context)!.filterResources,
                               active: _filter == 'resources',
                               onTap: () =>
                                   setState(() => _filter = 'resources'),
@@ -209,14 +210,14 @@ class _MapScreenState extends State<MapScreen> {
                           color: Colors.white.withValues(alpha: 0.88),
                           borderRadius: BorderRadius.circular(30),
                         ),
-                        child: const Row(
+                        child: Row(
                           children: [
-                            Icon(Icons.map_outlined, color: AppColors.outline),
-                            SizedBox(width: 10),
+                            const Icon(Icons.map_outlined, color: AppColors.outline),
+                            const SizedBox(width: 10),
                             Expanded(
                               child: Text(
-                                'Live citizen safety map from AppSync + PostGIS',
-                                style: TextStyle(color: AppColors.outline),
+                                AppLocalizations.of(context)!.liveMapBanner,
+                                style: const TextStyle(color: AppColors.outline),
                               ),
                             ),
                           ],
@@ -240,7 +241,7 @@ class _MapScreenState extends State<MapScreen> {
                       borderRadius: BorderRadius.circular(24),
                     ),
                   ),
-                  label: const Text('Get Me To Safety'),
+                  label: Text(AppLocalizations.of(context)!.getMeToSafety),
                 ),
               ),
               if (bundle.nearestSafeZone != null)
@@ -326,9 +327,9 @@ class _SafeZoneSheet extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text(
-            'Nearest Safe Zone',
-            style: TextStyle(
+          Text(
+            AppLocalizations.of(context)!.nearestSafeZone,
+            style: const TextStyle(
               color: AppColors.primary,
               fontWeight: FontWeight.w800,
               letterSpacing: 0.2,
@@ -343,7 +344,7 @@ class _SafeZoneSheet extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Capacity ${zone.currentOccupancy}/${zone.capacity}',
+            AppLocalizations.of(context)!.capacity(zone.currentOccupancy, zone.capacity),
             style: Theme.of(
               context,
             ).textTheme.bodyMedium?.copyWith(color: AppColors.outline),
