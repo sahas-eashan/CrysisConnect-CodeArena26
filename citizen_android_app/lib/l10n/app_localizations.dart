@@ -703,6 +703,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Run the Android app with the deployed AWS outputs supplied as dart-defines.'**
   String get backendConfigMessage;
+
+  /// No description provided for @navigating.
+  ///
+  /// In en, this message translates to:
+  /// **'Navigating...'**
+  String get navigating;
+
+  /// No description provided for @routeDistance.
+  ///
+  /// In en, this message translates to:
+  /// **'{distance} km'**
+  String routeDistance(String distance);
+
+  /// No description provided for @routeDuration.
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes} min'**
+  String routeDuration(String minutes);
+
+  /// No description provided for @cancelNavigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get cancelNavigation;
+
+  /// No description provided for @routeNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not find a route to the safe zone.'**
+  String get routeNotFound;
+
+  /// No description provided for @locationNeeded.
+  ///
+  /// In en, this message translates to:
+  /// **'Current location is needed for routing.'**
+  String get locationNeeded;
 }
 
 class _AppLocalizationsDelegate

@@ -1,7 +1,10 @@
+import 'dart:convert';
+
 import 'package:crisisconnect_citizen/core/backend.dart';
 import 'package:crisisconnect_citizen/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
 class MapScreen extends StatefulWidget {
@@ -13,9 +16,26 @@ class MapScreen extends StatefulWidget {
   State<MapScreen> createState() => _MapScreenState();
 }
 
+class _RouteInfo {
+  const _RouteInfo({
+    required this.points,
+    required this.distanceKm,
+    required this.durationMin,
+    required this.destination,
+  });
+
+  final List<LatLng> points;
+  final double distanceKm;
+  final double durationMin;
+  final SafeZone destination;
+}
+
 class _MapScreenState extends State<MapScreen> {
   late Future<MapBundle> _future;
+  final MapController _mapController = MapController();
   String _filter = 'all';
+  _RouteInfo? _activeRoute;
+  bool _routeLoading = false;
 
   @override
   void initState() {
@@ -26,8 +46,89 @@ class _MapScreenState extends State<MapScreen> {
   Future<void> _refresh() async {
     setState(() {
       _future = widget.repository.loadMapData();
+      _activeRoute = null;
     });
     await _future;
+  }
+
+  Future<void> _startNavigation(LatLng from, SafeZone zone) async {
+    final l10n = AppLocalizations.of(context)!;
+    final destination = zone.locationPoint;
+    if (destination == null) return;
+
+    setState(() => _routeLoading = true);
+
+    try {
+      final route = await _fetchRoute(from, destination.latLng);
+      if (!mounted) return;
+      if (route == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.routeNotFound)),
+        );
+        setState(() => _routeLoading = false);
+        return;
+      }
+
+      setState(() {
+        _activeRoute = _RouteInfo(
+          points: route.points,
+          distanceKm: route.distanceKm,
+          durationMin: route.durationMin,
+          destination: zone,
+        );
+        _routeLoading = false;
+      });
+
+      // Fit the map to the route bounds
+      final bounds = LatLngBounds.fromPoints(route.points);
+      _mapController.fitCamera(
+        CameraFit.bounds(
+          bounds: bounds,
+          padding: const EdgeInsets.fromLTRB(60, 120, 60, 280),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _routeLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    }
+  }
+
+  Future<_RouteResult?> _fetchRoute(LatLng from, LatLng to) async {
+    final url = Uri.parse(
+      'https://router.project-osrm.org/route/v1/driving/'
+      '${from.longitude},${from.latitude};'
+      '${to.longitude},${to.latitude}'
+      '?overview=full&geometries=geojson',
+    );
+
+    final response = await http.get(url);
+    if (response.statusCode != 200) return null;
+
+    final data = jsonDecode(response.body);
+    final routes = data['routes'] as List<dynamic>?;
+    if (routes == null || routes.isEmpty) return null;
+
+    final route = routes[0];
+    final geometry = route['geometry'];
+    final coordinates = geometry['coordinates'] as List<dynamic>;
+    final distanceMeters = (route['distance'] as num).toDouble();
+    final durationSeconds = (route['duration'] as num).toDouble();
+
+    final points = coordinates
+        .map((coord) => LatLng(
+              (coord[1] as num).toDouble(),
+              (coord[0] as num).toDouble(),
+            ))
+        .toList();
+
+    return _RouteResult(
+      points: points,
+      distanceKm: distanceMeters / 1000,
+      durationMin: durationSeconds / 60,
+    );
   }
 
   @override
@@ -45,15 +146,15 @@ class _MapScreenState extends State<MapScreen> {
               padding: const EdgeInsets.all(24),
               child: FilledButton(
                 onPressed: _refresh,
-                child: Text('${AppLocalizations.of(context)!.retryMapLoad}\n${snapshot.error}'),
+                child: Text(
+                    '${AppLocalizations.of(context)!.retryMapLoad}\n${snapshot.error}'),
               ),
             ),
           );
         }
 
         final bundle = snapshot.data!;
-        final center =
-            bundle.currentLocation ??
+        final center = bundle.currentLocation ??
             bundle.nearestSafeZone?.locationPoint?.latLng ??
             bundle.safeZones.firstOrNull?.locationPoint?.latLng ??
             bundle.disasters.firstOrNull?.mapCenter ??
@@ -131,113 +232,248 @@ class _MapScreenState extends State<MapScreen> {
             ),
         ];
 
-        return RefreshIndicator(
-          onRefresh: _refresh,
-          child: Stack(
-            children: [
-              FlutterMap(
-                options: MapOptions(
-                  initialCenter: center,
-                  initialZoom: 12,
-                  interactionOptions: const InteractionOptions(
-                    flags: InteractiveFlag.all,
-                  ),
+        return Stack(
+          children: [
+            FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter: center,
+                initialZoom: 12,
+                initialRotation: 0,
+                interactionOptions: const InteractionOptions(
+                  flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
                 ),
-                children: [
-                  TileLayer(
-                    urlTemplate:
-                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'com.crisisconnect.citizen',
-                  ),
-                  if ((_filter == 'all' || _filter == 'disasters') &&
-                      disasterPolygons.isNotEmpty)
-                    PolygonLayer(polygons: disasterPolygons),
-                  if ((_filter == 'all' || _filter == 'safeZones') &&
-                      safeZonePolygons.isNotEmpty)
-                    PolygonLayer(polygons: safeZonePolygons),
-                  MarkerLayer(markers: markers),
-                  const RichAttributionWidget(
-                    attributions: [
-                      TextSourceAttribution('OpenStreetMap contributors'),
-                    ],
-                  ),
-                ],
               ),
-              SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            _FilterChip(
-                              label: AppLocalizations.of(context)!.filterAll,
-                              active: _filter == 'all',
-                              onTap: () => setState(() => _filter = 'all'),
-                            ),
-                            _FilterChip(
-                              label: AppLocalizations.of(context)!.filterSafeZones,
-                              active: _filter == 'safeZones',
-                              onTap: () =>
-                                  setState(() => _filter = 'safeZones'),
-                            ),
-                            _FilterChip(
-                              label: AppLocalizations.of(context)!.filterDisasters,
-                              active: _filter == 'disasters',
-                              onTap: () =>
-                                  setState(() => _filter = 'disasters'),
-                            ),
-                            _FilterChip(
-                              label: AppLocalizations.of(context)!.filterResources,
-                              active: _filter == 'resources',
-                              onTap: () =>
-                                  setState(() => _filter = 'resources'),
-                            ),
-                          ],
-                        ),
+              children: [
+                TileLayer(
+                  urlTemplate:
+                      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.crisisconnect.citizen',
+                ),
+                if ((_filter == 'all' || _filter == 'disasters') &&
+                    disasterPolygons.isNotEmpty)
+                  PolygonLayer(polygons: disasterPolygons),
+                if ((_filter == 'all' || _filter == 'safeZones') &&
+                    safeZonePolygons.isNotEmpty)
+                  PolygonLayer(polygons: safeZonePolygons),
+                if (_activeRoute != null)
+                  PolylineLayer(
+                    polylines: [
+                      Polyline(
+                        points: _activeRoute!.points,
+                        strokeWidth: 5,
+                        color: AppColors.primary,
                       ),
                     ],
                   ),
+                MarkerLayer(markers: markers),
+                const RichAttributionWidget(
+                  attributions: [
+                    TextSourceAttribution('OpenStreetMap contributors'),
+                  ],
+                ),
+              ],
+            ),
+            SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _FilterChip(
+                            label:
+                                AppLocalizations.of(context)!.filterAll,
+                            active: _filter == 'all',
+                            onTap: () =>
+                                setState(() => _filter = 'all'),
+                          ),
+                          _FilterChip(
+                            label: AppLocalizations.of(context)!
+                                .filterSafeZones,
+                            active: _filter == 'safeZones',
+                            onTap: () =>
+                                setState(() => _filter = 'safeZones'),
+                          ),
+                          _FilterChip(
+                            label: AppLocalizations.of(context)!
+                                .filterDisasters,
+                            active: _filter == 'disasters',
+                            onTap: () =>
+                                setState(() => _filter = 'disasters'),
+                          ),
+                          _FilterChip(
+                            label: AppLocalizations.of(context)!
+                                .filterResources,
+                            active: _filter == 'resources',
+                            onTap: () =>
+                                setState(() => _filter = 'resources'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              Positioned(
-                left: 20,
-                right: 20,
-                bottom: 116,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
+            ),
+            Positioned(
+              left: 20,
+              right: 20,
+              bottom: 116,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_activeRoute != null)
+                    _NavigationBar(
+                      route: _activeRoute!,
+                      onCancel: () => setState(() => _activeRoute = null),
+                    )
+                  else
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 4),
                       child: FilledButton.icon(
-                        onPressed: _refresh,
-                        icon: const Icon(Icons.my_location_rounded),
+                        onPressed: _routeLoading
+                            ? null
+                            : () {
+                                final l10n =
+                                    AppLocalizations.of(context)!;
+                                if (bundle.currentLocation == null) {
+                                  ScaffoldMessenger.of(context)
+                                      .showSnackBar(
+                                    SnackBar(
+                                        content:
+                                            Text(l10n.locationNeeded)),
+                                  );
+                                  return;
+                                }
+                                if (bundle.nearestSafeZone == null) return;
+                                _startNavigation(
+                                  bundle.currentLocation!,
+                                  bundle.nearestSafeZone!,
+                                );
+                              },
+                        icon: _routeLoading
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.navigation_rounded),
                         style: FilledButton.styleFrom(
                           backgroundColor: AppColors.secondary,
-                          padding: const EdgeInsets.symmetric(vertical: 18),
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 18),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(24),
                           ),
                         ),
-                        label: Text(AppLocalizations.of(context)!.getMeToSafety),
+                        label: Text(
+                            AppLocalizations.of(context)!.getMeToSafety),
                       ),
                     ),
-                    if (bundle.nearestSafeZone != null) ...[
-                      const SizedBox(height: 16),
-                      _SafeZoneSheet(zone: bundle.nearestSafeZone!),
-                    ],
+                  if (bundle.nearestSafeZone != null &&
+                      _activeRoute == null) ...[
+                    const SizedBox(height: 16),
+                    _SafeZoneSheet(zone: bundle.nearestSafeZone!),
                   ],
-                ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         );
       },
+    );
+  }
+}
+
+class _RouteResult {
+  const _RouteResult({
+    required this.points,
+    required this.distanceKm,
+    required this.durationMin,
+  });
+
+  final List<LatLng> points;
+  final double distanceKm;
+  final double durationMin;
+}
+
+class _NavigationBar extends StatelessWidget {
+  const _NavigationBar({required this.route, required this.onCancel});
+
+  final _RouteInfo route;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.30),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.navigation_rounded, color: Colors.white, size: 28),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  route.destination.name,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${l10n.routeDistance(route.distanceKm.toStringAsFixed(1))}  •  ${l10n.routeDuration(route.durationMin.toStringAsFixed(0))}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.82),
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: onCancel,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Text(
+                l10n.cancelNavigation,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -327,7 +563,8 @@ class _SafeZoneSheet extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            AppLocalizations.of(context)!.capacity(zone.currentOccupancy, zone.capacity),
+            AppLocalizations.of(context)!
+                .capacity(zone.currentOccupancy, zone.capacity),
             style: Theme.of(
               context,
             ).textTheme.bodyMedium?.copyWith(color: AppColors.outline),
