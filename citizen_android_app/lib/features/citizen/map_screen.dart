@@ -200,29 +200,6 @@ class _MapScreenState extends State<MapScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 18,
-                          vertical: 14,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.88),
-                          borderRadius: BorderRadius.circular(30),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.map_outlined, color: AppColors.outline),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                AppLocalizations.of(context)!.liveMapBanner,
-                                style: const TextStyle(color: AppColors.outline),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                     ],
                   ),
                 ),
