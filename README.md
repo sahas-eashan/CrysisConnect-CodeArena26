@@ -1,170 +1,85 @@
-# CrisisConnect
+# CrysisConnect — CodeArena 26
 
-Unified disaster management and community resilience platform for citizens, NGOs, field workers, and government agencies.
+A disaster-response platform for citizen photo reports, evidence verification, area warnings, crew dispatch and relief coordination. It targets **Topic 04** of the CodeArena 26 ideathon brief.
 
-## Problem Statement
+## Run the local workflow
 
-Disaster response is often fragmented across disconnected hotlines, spreadsheets, messaging groups, and static dashboards. That fragmentation causes delayed evacuations, duplicated resource allocation, and slow SOS escalation. Sri Lanka's exposure to floods, landslides, droughts, and tsunami-related risks makes those gaps especially costly.
+Use Node.js 22 or later.
 
-CrisisConnect addresses that gap with a single platform that:
-
-- registers and manages disasters in real time
-- routes citizens to safe zones based on live capacity
-- lets NGOs publish and fulfill resource inventory
-- connects SOS requests to nearby responders
-- broadcasts geofenced multi-channel alerts
-- supports offline-safe workflows for critical emergency actions
-
-## Three Portals
-
-### Citizen portal
-
-- live disaster map with safe zones and resources
-- browse and request essentials
-- submit one-tap SOS with geolocation
-- read live public updates and advisories
-
-### NGO / field worker portal
-
-- self-register and onboard response teams
-- manage inventory and field resources
-- monitor and accept SOS incidents
-- publish field updates to the public feed
-
-### Government portal
-
-- register disaster polygons and severity
-- manage safe zones and occupancy
-- approve organization registrations
-- send SMS, email, and push-aligned alerts
-- monitor finance, resources, and operational analytics
-
-## Key Innovation Features
-
-- **Geofenced alerts**: disaster polygons in PostGIS drive targeted notifications.
-- **Capacity-aware safe-zone routing**: citizens are routed to the nearest shelter with remaining capacity.
-- **Intelligent SOS triage**: nearest available responders are identified using geospatial proximity.
-- **Offline-ready experience**: service worker caches core emergency assets and keeps the app usable in degraded connectivity.
-- **Infrastructure as code**: the AWS backend is fully provisioned with Terraform for repeatable setup and teardown.
-
-## Tech Stack
-
-- **Frontend**: Next.js App Router, TypeScript, Tailwind CSS
-- **Cloud**: AWS Cognito, AppSync, Lambda, RDS PostgreSQL, SNS, SES, S3, CloudWatch
-- **Infrastructure**: Terraform
-- **Maps**: MapLibre + OpenStreetMap
-- **Charts**: Recharts
-- **Database extensions**: PostGIS
-
-## Architecture Overview
-
-```mermaid
-flowchart TB
-    Citizen[CitizenPortal] --> NextApp[Next.jsApp]
-    NGO[NGOPortal] --> NextApp
-    Gov[GovernmentPortal] --> NextApp
-    NextApp --> Cognito[CognitoUserPool]
-    NextApp --> AppSync[AppSyncGraphQL]
-    AppSync --> Lambda[LambdaResolvers]
-    Lambda --> RDS[RDSPostgresPostGIS]
-    Lambda --> S3[S3Uploads]
-    Lambda --> Worker[AsyncWorkerLambda]
-    Worker --> SNS[SNSSMS]
-    Worker --> SES[SESEmail]
-    Lambda --> CloudWatch[CloudWatchLogs]
-```
-
-## Project Structure
-
-```text
-infrastructure/    Terraform for AWS resources
-db/                SQL schema and demo seed
-lambda/            AppSync resolver and async worker code
-src/               Next.js frontend portals and shared UI
-public/            PWA manifest and service worker
-docs/              Demo and presentation material
-```
-
-## Local Setup
-
-### 1. Install dependencies
-
-```bash
-npm install --legacy-peer-deps
-```
-
-### 2. Configure frontend environment
-
-Copy `.env.example` to `.env.local` and fill in the Terraform outputs after provisioning AWS.
-
-### 3. Provision infrastructure
-
-```bash
-cd infrastructure
-copy terraform.tfvars.example terraform.tfvars
-terraform init
-terraform plan -var="db_password=YourStrongPassword123!" -var="ses_sender_email=alerts@example.com"
-terraform apply
-```
-
-### 4. Database bootstrap
-
-`terraform apply` now runs the database bootstrap automatically after RDS becomes reachable.
-
-It executes:
-
-- `db/migrations/001_schema.sql`
-- `db/seed.sql`
-
-through `scripts/bootstrap-db.mjs`.
-
-Manual fallback is still available:
-
-```bash
-node scripts/run-sql.mjs db/migrations/001_schema.sql
-node scripts/run-sql.mjs db/seed.sql
-```
-
-### 5. Run the app
-
-```bash
+```sh
+npm ci --legacy-peer-deps
 npm run dev
 ```
 
-Open:
+Open three tabs:
 
-- `http://localhost:3000/`
-- `http://localhost:3000/citizen/dashboard`
-- `http://localhost:3000/ngo/dashboard`
-- `http://localhost:3000/admin/dashboard`
+- [Citizen reports](http://localhost:3000/citizen/hazards): submit a photo and GPS location, request help, supply additional evidence and track status.
+- [Government review](http://localhost:3000/admin/hazards): inspect five checks, request more information, confirm/reject reports, assign a crew and allocate shelter places.
+- [NGO field queue](http://localhost:3000/ngo/hazards): inspect assigned cases and close them with a **new** clearance photo and field notes.
 
-## Validation Performed
+Without cloud configuration, development uses clearly labeled demo identities and durable `.data/hazards.json` storage. All three portals share the same persisted cases. Demo shelters are sample locations, not verified operating facilities.
 
-- `npm run build`
-- `npm run typecheck`
-- `terraform -chdir=infrastructure validate`
-- `terraform -chdir=infrastructure plan -input=false -lock=false -var="db_password=HackathonTemp123!" -var="ses_sender_email=alerts@example.com" -var="app_url=http://localhost:3000"`
+```sh
+npm run weather:replay
+```
 
-The Terraform plan currently resolves to **61 resources to add**.
+The replay sends simulated normal and flood-level gauge readings to the running backend. Flood thresholds create an area warning and verification case even when no citizen has reported a hazard.
 
-## Demo Flow
+## Evidence workflow
 
-Use this sequence in the live presentation:
+```mermaid
+flowchart TD
+  Citizen[Citizen photo + GPS] --> Case[Persistent case builder]
+  Feed[Weather / river replay] --> Case
+  Feed --> Warning[Threshold area warning]
+  Case --> Weather[Weather: SYSTEM]
+  Case --> Cluster[Nearby independent reports: SYSTEM]
+  Case --> Image[Image: AI]
+  Case --> Location[Location plausibility: AI]
+  Case --> Risk[Risk: AI]
+  Weather & Cluster & Image & Location & Risk --> Verdict[AI aggregation + evidence gates]
+  Verdict --> More[Request more evidence]
+  More --> Citizen
+  Verdict --> Review[Government verification]
+  Verdict --> Map[Confirmed hazard + area alert]
+  Review --> Map
+  Map --> Crew[Crew assignment]
+  Crew --> Close[Clearance photo + field notes]
+  Close --> Update[Map removal + citizen update]
+  Review --> Feedback[Recorded outcomes adjust bounded thresholds]
+  Map --> Relief[Shelter reservations + relief allocation]
+```
 
-1. Government creates a new Colombo flood disaster polygon.
-2. Alert composer sends a geofenced warning.
-3. Citizen portal shows the updated map and a nearby safe zone.
-4. Citizen submits an SOS request.
-5. NGO portal receives the SOS in the live queue and accepts dispatch.
-6. Government dashboard shows analytics and resource/finance visibility.
+Gemini runs only on the backend. With a configured `GEMINI_API_KEY`, image, location and risk checks feed a structured aggregator. Without a key, or if a check fails, the app shows unavailable checks and requires human verification. Confidence is a model estimate, not calibrated accuracy. It is never replaced with a fixed success percentage.
 
-Detailed presentation material is included in:
+Road candidates are checked along their complete segments against recorded hazards. Provider failures, intersecting routes, unknown geometry or full shelters yield no screened route. Local demo destinations are identified as fixtures.
 
-- `docs/demo-script.md`
-- `docs/presentation-outline.md`
+## Platform components
 
-## Notes
+- AWS Cognito, AppSync subscriptions, Lambda, PostgreSQL/PostGIS, S3 and Terraform infrastructure.
+- Government disaster polygons, geofenced SMS/email, safe zones and operational dashboards.
+- Citizen SOS and resource requests; NGO response and inventory workflows.
+- Flutter Android citizen app. SOS errors remain unconfirmed; routes are screened against current disaster polygons and the shared hazard API.
 
-- The frontend runs in demo mode if AWS environment variables are missing, so judges can still navigate the full UX.
-- The middleware enforces role-based route protection when Cognito is configured.
-- The Terraform stack is optimized for a hackathon deployment path and easy teardown.
+The new `/api/hazards` service runs in the Next.js **Node server**. Live deployments use verified Cognito identities and PostgreSQL state. Existing AppSync operations remain available; new hazard notifications are persisted **in-app broadcasts**, not automatic SMS sends.
+
+## Checks
+
+```sh
+npm run typecheck
+npm test
+npm run build
+npx playwright install chromium
+npm run test:e2e
+```
+
+Android:
+
+```sh
+cd citizen_android_app
+flutter pub get
+flutter analyze
+flutter test
+```
+
+See [configuration and deployment](docs/codearena26-setup.md), [demo walkthrough](docs/demo-script.md), [requirements mapping](docs/codearena26-requirements.md), and [workflow scope](docs/codearena26-plan.md).
