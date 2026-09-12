@@ -24,12 +24,40 @@ function roleFromGroups(groups: string[]) {
 
 export default function LoginPage() {
   const router = useRouter();
-  const { completeNewPassword, login } = useAuth();
+  const { completeNewPassword, groups, isReady, login, logout, user } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<"signIn" | "newPassword">("signIn");
   const [loading, setLoading] = useState(false);
   const [pendingRole, setPendingRole] = useState("citizen");
   const hasAwsConfig = Boolean(process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID);
+  const signedInRole = roleFromGroups(groups);
+
+  async function continueAsSignedInUser() {
+    const role = hasAwsConfig ? signedInRole : pendingRole;
+
+    await fetch("/api/auth/session", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ role })
+    });
+
+    router.push(roleRedirects[role] ?? "/");
+  }
+
+  async function signOutCurrentUser() {
+    setLoading(true);
+    setError(null);
+
+    try {
+      await logout();
+    } catch (logoutError) {
+      setError(logoutError instanceof Error ? logoutError.message : "Unable to sign out the current user.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -74,7 +102,12 @@ export default function LoginPage() {
       });
       router.push(roleRedirects[role] ?? "/");
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Unable to sign in.");
+      const nextError = submitError instanceof Error ? submitError.message : "Unable to sign in.";
+      setError(
+        nextError.includes("already a signed in user")
+          ? "A Cognito user is already signed in on this browser. Continue with that account or sign out first."
+          : nextError
+      );
     } finally {
       setLoading(false);
     }
@@ -89,6 +122,22 @@ export default function LoginPage() {
             ? "Cognito requires a one-time password change before this account can finish signing in."
             : "Use Cognito credentials when AWS is configured. Without env vars, the app runs in demo mode."}
         </CardDescription>
+        {hasAwsConfig && isReady && user ? (
+          <div className="mt-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100">
+            <p className="font-medium">Already signed in</p>
+            <p className="mt-1">
+              Current Cognito session: {user}. Portal access will use the role detected from this account.
+            </p>
+            <div className="mt-4 flex gap-3">
+              <Button disabled={loading} onClick={() => void continueAsSignedInUser()} type="button">
+                Continue
+              </Button>
+              <Button disabled={loading} onClick={() => void signOutCurrentUser()} type="button" variant="outline">
+                Sign out first
+              </Button>
+            </div>
+          </div>
+        ) : null}
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
           {mode === "newPassword" ? (
             <Input name="newPassword" placeholder="Set a new password" required type="password" />
