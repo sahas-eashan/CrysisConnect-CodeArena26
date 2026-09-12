@@ -28,6 +28,38 @@ const defaultForm: ResourceFormState = {
   location: ""
 };
 
+function normalizeLocationInput(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  if (trimmed.startsWith("{")) {
+    const parsed = JSON.parse(trimmed) as { type?: string; coordinates?: unknown };
+    if (
+      parsed.type === "Point" &&
+      Array.isArray(parsed.coordinates) &&
+      parsed.coordinates.length >= 2 &&
+      Number.isFinite(Number(parsed.coordinates[0])) &&
+      Number.isFinite(Number(parsed.coordinates[1]))
+    ) {
+      return JSON.stringify({
+        type: "Point",
+        coordinates: [Number(parsed.coordinates[0]), Number(parsed.coordinates[1])]
+      });
+    }
+    throw new Error("Location JSON must be a GeoJSON Point with numeric coordinates.");
+  }
+
+  const match = trimmed.match(/^POINT\s*\(\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s*\)$/i);
+  if (match) {
+    return JSON.stringify({
+      type: "Point",
+      coordinates: [Number(match[1]), Number(match[2])]
+    });
+  }
+
+  throw new Error("Location must be GeoJSON Point JSON or WKT like POINT (77.8685 6.924).");
+}
+
 function sortRequests(requests: ResourceRequest[]) {
   const priorityWeight: Record<string, number> = {
     high: 0,
@@ -188,7 +220,7 @@ export default function NgoResourcesPage() {
       setSavingResource(true);
       setError(null);
       const quantity = Number(form.quantity);
-      const location = form.location.trim() || null;
+      const location = normalizeLocationInput(form.location);
       await client.graphql({
         query: mutations.createResource,
         variables: {
@@ -319,7 +351,7 @@ export default function NgoResourcesPage() {
           />
           <Input
             name="location"
-            placeholder='GeoJSON Point, e.g. {"type":"Point","coordinates":[79.87,6.93]}'
+            placeholder='GeoJSON Point or POINT (77.8685 6.924)'
             value={form.location}
             onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))}
           />
