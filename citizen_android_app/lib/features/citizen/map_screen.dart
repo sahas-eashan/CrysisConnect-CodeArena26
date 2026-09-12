@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key, required this.repository});
@@ -62,9 +63,9 @@ class _MapScreenState extends State<MapScreen> {
       final route = await _fetchRoute(from, destination.latLng);
       if (!mounted) return;
       if (route == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.routeNotFound)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.routeNotFound)));
         setState(() => _routeLoading = false);
         return;
       }
@@ -90,10 +91,44 @@ class _MapScreenState extends State<MapScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() => _routeLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
     }
+  }
+
+  Future<void> _openGoogleMapsDirections(SafeZone zone) async {
+    final l10n = AppLocalizations.of(context)!;
+    final destination = zone.locationPoint;
+    if (destination == null) return;
+
+    final googleMapsUri = Uri.parse(
+      'google.navigation:q=${destination.latitude},${destination.longitude}&mode=d',
+    );
+    final browserFallbackUri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=${destination.latitude},${destination.longitude}&travelmode=driving',
+    );
+
+    try {
+      final openedInMaps = await launchUrl(
+        googleMapsUri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (openedInMaps || !mounted) return;
+
+      final openedFallback = await launchUrl(
+        browserFallbackUri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (openedFallback || !mounted) return;
+    } catch (_) {
+      if (!mounted) return;
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(l10n.googleMapsOpenFailed)));
   }
 
   Future<_RouteResult?> _fetchRoute(LatLng from, LatLng to) async {
@@ -118,10 +153,12 @@ class _MapScreenState extends State<MapScreen> {
     final durationSeconds = (route['duration'] as num).toDouble();
 
     final points = coordinates
-        .map((coord) => LatLng(
-              (coord[1] as num).toDouble(),
-              (coord[0] as num).toDouble(),
-            ))
+        .map(
+          (coord) => LatLng(
+            (coord[1] as num).toDouble(),
+            (coord[0] as num).toDouble(),
+          ),
+        )
         .toList();
 
     return _RouteResult(
@@ -147,14 +184,16 @@ class _MapScreenState extends State<MapScreen> {
               child: FilledButton(
                 onPressed: _refresh,
                 child: Text(
-                    '${AppLocalizations.of(context)!.retryMapLoad}\n${snapshot.error}'),
+                  '${AppLocalizations.of(context)!.retryMapLoad}\n${snapshot.error}',
+                ),
               ),
             ),
           );
         }
 
         final bundle = snapshot.data!;
-        final center = bundle.currentLocation ??
+        final center =
+            bundle.currentLocation ??
             bundle.nearestSafeZone?.locationPoint?.latLng ??
             bundle.safeZones.firstOrNull?.locationPoint?.latLng ??
             bundle.disasters.firstOrNull?.mapCenter ??
@@ -246,8 +285,7 @@ class _MapScreenState extends State<MapScreen> {
               ),
               children: [
                 TileLayer(
-                  urlTemplate:
-                      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                   userAgentPackageName: 'com.crisisconnect.citizen',
                 ),
                 if ((_filter == 'all' || _filter == 'disasters') &&
@@ -286,32 +324,30 @@ class _MapScreenState extends State<MapScreen> {
                       child: Row(
                         children: [
                           _FilterChip(
-                            label:
-                                AppLocalizations.of(context)!.filterAll,
+                            label: AppLocalizations.of(context)!.filterAll,
                             active: _filter == 'all',
-                            onTap: () =>
-                                setState(() => _filter = 'all'),
+                            onTap: () => setState(() => _filter = 'all'),
                           ),
                           _FilterChip(
-                            label: AppLocalizations.of(context)!
-                                .filterSafeZones,
+                            label: AppLocalizations.of(
+                              context,
+                            )!.filterSafeZones,
                             active: _filter == 'safeZones',
-                            onTap: () =>
-                                setState(() => _filter = 'safeZones'),
+                            onTap: () => setState(() => _filter = 'safeZones'),
                           ),
                           _FilterChip(
-                            label: AppLocalizations.of(context)!
-                                .filterDisasters,
+                            label: AppLocalizations.of(
+                              context,
+                            )!.filterDisasters,
                             active: _filter == 'disasters',
-                            onTap: () =>
-                                setState(() => _filter = 'disasters'),
+                            onTap: () => setState(() => _filter = 'disasters'),
                           ),
                           _FilterChip(
-                            label: AppLocalizations.of(context)!
-                                .filterResources,
+                            label: AppLocalizations.of(
+                              context,
+                            )!.filterResources,
                             active: _filter == 'resources',
-                            onTap: () =>
-                                setState(() => _filter = 'resources'),
+                            onTap: () => setState(() => _filter = 'resources'),
                           ),
                         ],
                       ),
@@ -332,6 +368,8 @@ class _MapScreenState extends State<MapScreen> {
                     _NavigationBar(
                       route: _activeRoute!,
                       onCancel: () => setState(() => _activeRoute = null),
+                      onOpenInGoogleMaps: () =>
+                          _openGoogleMapsDirections(_activeRoute!.destination),
                     )
                   else
                     Padding(
@@ -340,14 +378,12 @@ class _MapScreenState extends State<MapScreen> {
                         onPressed: _routeLoading
                             ? null
                             : () {
-                                final l10n =
-                                    AppLocalizations.of(context)!;
+                                final l10n = AppLocalizations.of(context)!;
                                 if (bundle.currentLocation == null) {
-                                  ScaffoldMessenger.of(context)
-                                      .showSnackBar(
+                                  ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                        content:
-                                            Text(l10n.locationNeeded)),
+                                      content: Text(l10n.locationNeeded),
+                                    ),
                                   );
                                   return;
                                 }
@@ -369,20 +405,24 @@ class _MapScreenState extends State<MapScreen> {
                             : const Icon(Icons.navigation_rounded),
                         style: FilledButton.styleFrom(
                           backgroundColor: AppColors.secondary,
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 18),
+                          padding: const EdgeInsets.symmetric(vertical: 18),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(24),
                           ),
                         ),
                         label: Text(
-                            AppLocalizations.of(context)!.getMeToSafety),
+                          AppLocalizations.of(context)!.getMeToSafety,
+                        ),
                       ),
                     ),
                   if (bundle.nearestSafeZone != null &&
                       _activeRoute == null) ...[
                     const SizedBox(height: 16),
-                    _SafeZoneSheet(zone: bundle.nearestSafeZone!),
+                    _SafeZoneSheet(
+                      zone: bundle.nearestSafeZone!,
+                      onOpenInGoogleMaps: () =>
+                          _openGoogleMapsDirections(bundle.nearestSafeZone!),
+                    ),
                   ],
                 ],
               ),
@@ -407,10 +447,15 @@ class _RouteResult {
 }
 
 class _NavigationBar extends StatelessWidget {
-  const _NavigationBar({required this.route, required this.onCancel});
+  const _NavigationBar({
+    required this.route,
+    required this.onCancel,
+    required this.onOpenInGoogleMaps,
+  });
 
   final _RouteInfo route;
   final VoidCallback onCancel;
+  final VoidCallback onOpenInGoogleMaps;
 
   @override
   Widget build(BuildContext context) {
@@ -439,20 +484,30 @@ class _NavigationBar extends StatelessWidget {
                 Text(
                   route.destination.name,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                      ),
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   '${l10n.routeDistance(route.distanceKm.toStringAsFixed(1))}  •  ${l10n.routeDuration(route.durationMin.toStringAsFixed(0))}',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.white.withValues(alpha: 0.82),
-                        fontWeight: FontWeight.w600,
-                      ),
+                    color: Colors.white.withValues(alpha: 0.82),
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            onPressed: onOpenInGoogleMaps,
+            tooltip: l10n.openInGoogleMaps,
+            style: IconButton.styleFrom(
+              backgroundColor: Colors.white.withValues(alpha: 0.18),
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(Icons.map_rounded),
           ),
           const SizedBox(width: 8),
           GestureDetector(
@@ -530,9 +585,10 @@ class _MapMarker extends StatelessWidget {
 }
 
 class _SafeZoneSheet extends StatelessWidget {
-  const _SafeZoneSheet({required this.zone});
+  const _SafeZoneSheet({required this.zone, required this.onOpenInGoogleMaps});
 
   final SafeZone zone;
+  final VoidCallback onOpenInGoogleMaps;
 
   @override
   Widget build(BuildContext context) {
@@ -546,13 +602,34 @@ class _SafeZoneSheet extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            AppLocalizations.of(context)!.nearestSafeZone,
-            style: const TextStyle(
-              color: AppColors.primary,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.2,
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  AppLocalizations.of(context)!.nearestSafeZone,
+                  style: const TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              OutlinedButton.icon(
+                onPressed: onOpenInGoogleMaps,
+                icon: const Icon(Icons.map_outlined, size: 18),
+                label: Text(AppLocalizations.of(context)!.directionsButton),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: AppColors.primary),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 6),
           Text(
@@ -563,8 +640,9 @@ class _SafeZoneSheet extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            AppLocalizations.of(context)!
-                .capacity(zone.currentOccupancy, zone.capacity),
+            AppLocalizations.of(
+              context,
+            )!.capacity(zone.currentOccupancy, zone.capacity),
             style: Theme.of(
               context,
             ).textTheme.bodyMedium?.copyWith(color: AppColors.outline),
