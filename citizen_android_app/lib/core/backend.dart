@@ -1317,44 +1317,13 @@ class CitizenRepository {
         variables: {'disasterId': disasterId},
       );
       return CitizenAiGuidance.fromJson(result as Map<String, dynamic>);
-    } catch (_) {
-      return const CitizenAiGuidance(
-        title: 'Safety guidance for your area',
-        safeZoneId: null,
-        resourceIds: [],
-        nextSteps: [
-          'Move toward the nearest verified safe zone if travel is safe.',
-          'Avoid flooded roads and use bottled or boiled water only.',
-          'Keep your phone charged for live alerts.',
-        ],
-        guidance: AiTranslationSet(
-          english:
-              'Move toward the nearest verified safe zone if travel is safe.',
-          sinhala:
-              'ගමන් කිරීම ආරක්ෂිත නම් ආසන්නයේ ඇති සත්‍යාපිත ආරක්ෂිත ස්ථානය වෙත යන්න.',
-          tamil:
-              'பாதுகாப்பாக பயணம் செய்ய முடிந்தால் அருகிலுள்ள சரிபார்க்கப்பட்ட பாதுகாப்பு மையத்திற்குச் செல்லுங்கள்.',
-        ),
-        meta: AiResponseMeta(
-          status: 'fallback',
-          confidence: 0.76,
-          sourceIds: [],
-          warnings: [
-            'AI guidance is advisory. Follow official emergency instructions when they differ.',
-          ],
-          requiresHumanApproval: false,
-          audit: AiAuditRef(
-            id: 'mobile-fallback-guidance',
-            action: 'getCitizenGuidance',
-            model: 'fallback',
-            status: 'fallback',
-            createdAt: '',
-            reviewStatus: 'not_required',
-          ),
-        ),
+    } catch (error) {
+      throw Exception(
+        "Unable to load live AI safety guidance. ${error.toString().replaceFirst('Exception: ', '')}",
       );
     }
   }
+
 
   Future<ResourcesBundle> loadResourcesBundle() async {
     final results = await Future.wait<dynamic>([
@@ -1459,40 +1428,13 @@ class CitizenRepository {
         },
       );
       return PreparedSos.fromJson(result as Map<String, dynamic>);
-    } catch (_) {
-      return PreparedSos(
-        original: description,
-        refined: '${type.toUpperCase()} emergency: $description',
-        checklist: const [
-          'Review the summary before sending.',
-          'Keep location services enabled.',
-          'Call emergency services directly if immediate danger escalates.',
-        ],
-        translations: AiTranslationSet(
-          english: '${type.toUpperCase()} emergency: $description',
-          sinhala: '${type.toUpperCase()} හදිසි තත්ත්වය: $description',
-          tamil: '${type.toUpperCase()} அவசரநிலை: $description',
-        ),
-        meta: const AiResponseMeta(
-          status: 'fallback',
-          confidence: 0.74,
-          sourceIds: [],
-          warnings: [
-            'Review the AI-prepared SOS before sending it to responders.',
-          ],
-          requiresHumanApproval: true,
-          audit: AiAuditRef(
-            id: 'mobile-fallback-sos',
-            action: 'prepareSosSubmission',
-            model: 'fallback',
-            status: 'fallback',
-            createdAt: '',
-            reviewStatus: 'pending_review',
-          ),
-        ),
+    } catch (error) {
+      throw Exception(
+        "Unable to prepare SOS with live AI. ${error.toString().replaceFirst('Exception: ', '')}",
       );
     }
   }
+
 
   Stream<NewsUpdate> subscribeToNews() {
     return _backend
@@ -1630,3 +1572,4 @@ class AppColors {
   static const onSurface = Color(0xFF111D23);
   static const error = Color(0xFFBA1A1A);
 }
+

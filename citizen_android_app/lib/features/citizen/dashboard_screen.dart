@@ -121,6 +121,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
               FutureBuilder<CitizenAiGuidance>(
                 future: _guidanceFuture,
                 builder: (context, guidanceSnapshot) {
+                  if (guidanceSnapshot.hasError) {
+                    return _EmptyTile(
+                      message: guidanceSnapshot.error
+                          .toString()
+                          .replaceFirst('Exception: ', ''),
+                    );
+                  }
                   final guidance = guidanceSnapshot.data;
                   if (guidance == null) return const SizedBox.shrink();
                   return _AiGuidanceCard(guidance: guidance);
