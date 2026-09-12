@@ -14,8 +14,10 @@ body {
 body {
   margin: 0;
   background:
-    radial-gradient(circle at top, rgba(56, 189, 248, 0.14), transparent 30%),
-    linear-gradient(180deg, #08111f 0%, #050b14 100%);
+    radial-gradient(circle at 12% 12%, rgba(56, 189, 248, 0.2), transparent 28%),
+    radial-gradient(circle at 88% 18%, rgba(34, 197, 94, 0.16), transparent 24%),
+    radial-gradient(circle at 50% 100%, rgba(245, 158, 11, 0.14), transparent 32%),
+    linear-gradient(180deg, #0b1324 0%, #07101c 48%, #050b14 100%);
   color: #f8fafc;
   font-family:
     Inter,
@@ -25,6 +27,7 @@ body {
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
+  background-attachment: fixed;
 }
 
 a {
@@ -34,6 +37,23 @@ a {
 
 * {
   box-sizing: border-box;
+}
+
+body::before {
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: fixed;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(circle at center, black 35%, transparent 90%);
+}
+
+::selection {
+  background: rgba(56, 189, 248, 0.35);
+  color: #f8fafc;
 }
 
 .cc-map-popup .maplibregl-popup-content {

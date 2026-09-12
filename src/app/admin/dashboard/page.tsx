@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { generateClient } from "aws-amplify/api";
 
@@ -108,6 +109,39 @@ export default function AdminDashboardPage() {
           </p>
         </Card>
       </div>
+
+      <Card className="border-white/10 bg-gradient-to-r from-red-500/10 via-amber-400/10 to-emerald-500/10">
+        <CardTitle>Command jumps</CardTitle>
+        <CardDescription className="mt-2">
+          Government does not yet have a dedicated incident-by-incident event detail page, so these shortcuts open the closest live operational views.
+        </CardDescription>
+        <div className="mt-6 flex flex-wrap gap-3">
+          <Link
+            className="inline-flex items-center rounded-xl bg-red-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-400"
+            href="/admin/disasters"
+          >
+            Open disasters
+          </Link>
+          <Link
+            className="inline-flex items-center rounded-xl bg-amber-400 px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-yellow-300"
+            href="/admin/safe-zones"
+          >
+            Open safe zones
+          </Link>
+          <Link
+            className="inline-flex items-center rounded-xl bg-emerald-400 px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-emerald-300"
+            href="/admin/resources"
+          >
+            Open resources
+          </Link>
+          <Link
+            className="inline-flex items-center rounded-xl border border-sky-400/40 bg-sky-400/15 px-4 py-2 text-sm font-medium text-sky-100 transition hover:bg-sky-400/25"
+            href="/ngo/sos-queue"
+          >
+            Open live SOS queue
+          </Link>
+        </div>
+      </Card>
     </div>
   );
 }
