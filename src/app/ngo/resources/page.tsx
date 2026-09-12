@@ -15,6 +15,7 @@ import { cn, toTitleCase } from "@/lib/utils";
 
 type ResourceFormState = {
   name: string;
+  otherName: string;
   category: string;
   quantity: string;
   unit: string;
@@ -23,6 +24,7 @@ type ResourceFormState = {
 
 const defaultForm: ResourceFormState = {
   name: "",
+  otherName: "",
   category: "",
   quantity: "",
   unit: "",
@@ -77,6 +79,18 @@ export default function NgoResourcesPage() {
     urgency?: string | null;
   }> = [];
   const fulfillingId: string | null = null;
+  const resourceOptions = Array.from(
+    new Map(
+      resources
+        .filter((resource) => resource.name.trim())
+        .map((resource) => [resource.name.trim().toLowerCase(), resource])
+    ).values()
+  ).sort((left, right) => left.name.localeCompare(right.name));
+  const selectedExistingResource =
+    form.name && form.name !== "__other__"
+      ? resourceOptions.find((resource) => resource.name === form.name) ?? null
+      : null;
+  const isOtherResource = form.name === "__other__";
 
   useEffect(() => {
     if (!hasAwsConfig) return;
@@ -151,22 +165,29 @@ export default function NgoResourcesPage() {
     try {
       setSavingResource(true);
       setError(null);
+      setMessage(null);
       const quantity = Number(form.quantity);
       const location = normalizeLocationInput(form.location);
+      const resourceName = isOtherResource ? form.otherName.trim() : form.name.trim();
+
+      if (!resourceName) {
+        throw new Error("Choose an existing resource or select Other and enter a resource name.");
+      }
+
       await client.graphql({
         query: mutations.createResource,
         variables: {
           input: {
-            name: form.name.trim(),
-            category: form.category.trim() || null,
+            name: resourceName,
+            category: isOtherResource ? form.category.trim() || null : null,
             quantity: Number.isFinite(quantity) ? quantity : null,
-            unit: form.unit.trim() || null,
+            unit: isOtherResource ? form.unit.trim() || null : null,
             location
           }
         }
       });
 
-      setMessage("Resource published successfully.");
+      setMessage(selectedExistingResource ? "Existing resource inventory updated successfully." : "Resource published successfully.");
       setForm(defaultForm);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Unable to save the resource update.");
@@ -253,20 +274,55 @@ export default function NgoResourcesPage() {
           Fast updates from the field keep routing and allocation accurate.
         </CardDescription>
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
-          <Input
-            name="name"
-            placeholder="Resource name"
-            required
-            value={form.name}
-            onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-          />
-          <Input
-            name="category"
-            placeholder="Category"
-            required
-            value={form.category}
-            onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
-          />
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-white" htmlFor="resource-name">
+              Resource name
+            </label>
+            <select
+              className="flex h-11 w-full rounded-2xl border border-slate-800 bg-slate-950/60 px-4 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-primary"
+              id="resource-name"
+              name="name"
+              required
+              value={form.name}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  name: event.target.value,
+                  otherName: event.target.value === "__other__" ? current.otherName : "",
+                  category: event.target.value === "__other__" ? current.category : "",
+                  unit: event.target.value === "__other__" ? current.unit : ""
+                }))
+              }
+            >
+              <option disabled hidden value="">
+                Select a resource
+              </option>
+              {resourceOptions.map((resource) => (
+                <option key={resource.id} value={resource.name}>
+                  {resource.name}
+                </option>
+              ))}
+              <option value="__other__">Other</option>
+            </select>
+          </div>
+          {isOtherResource ? (
+            <Input
+              name="otherName"
+              placeholder="Enter resource name"
+              required
+              value={form.otherName}
+              onChange={(event) => setForm((current) => ({ ...current, otherName: event.target.value }))}
+            />
+          ) : null}
+          {!selectedExistingResource ? (
+            <Input
+              name="category"
+              placeholder="Category"
+              required={isOtherResource}
+              value={form.category}
+              onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
+            />
+          ) : null}
           <Input
             min={0}
             name="quantity"
@@ -276,19 +332,28 @@ export default function NgoResourcesPage() {
             value={form.quantity}
             onChange={(event) => setForm((current) => ({ ...current, quantity: event.target.value }))}
           />
-          <Input
-            name="unit"
-            placeholder="Unit"
-            required
-            value={form.unit}
-            onChange={(event) => setForm((current) => ({ ...current, unit: event.target.value }))}
-          />
+          {!selectedExistingResource ? (
+            <Input
+              name="unit"
+              placeholder="Unit"
+              required={isOtherResource}
+              value={form.unit}
+              onChange={(event) => setForm((current) => ({ ...current, unit: event.target.value }))}
+            />
+          ) : null}
           <Input
             name="location"
             placeholder='GeoJSON Point or POINT (77.8685 6.924)'
             value={form.location}
             onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))}
           />
+          {selectedExistingResource ? (
+            <p className="text-sm text-muted">
+              Updating existing inventory for {selectedExistingResource.name}
+              {selectedExistingResource.category ? ` • ${selectedExistingResource.category}` : ""}
+              {selectedExistingResource.unit ? ` • ${selectedExistingResource.unit}` : ""}.
+            </p>
+          ) : null}
           <div className="flex flex-wrap items-center gap-3">
             <Button onClick={requestLocation} type="button" variant="outline">
               {locationLoading ? "Getting location..." : "Get current location"}

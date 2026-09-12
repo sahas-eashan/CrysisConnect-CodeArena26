@@ -508,13 +508,89 @@ export async function handler(event: AppSyncEvent) {
     case "createResource": {
       requireGroup(event, ["ngo", "government"]);
       const input = args.input;
-      const { rows } = await pool.query(
-        `INSERT INTO resources (name, category, quantity, unit, status, location, managed_by, org_id, disaster_id)
-         VALUES ($1, $2, $3, $4, 'available', ${geoJsonSql(input.location)}, $5, $6, $7)
-         RETURNING *, ST_AsGeoJSON(location) AS location`,
-        [input.name, input.category ?? null, input.quantity ?? null, input.unit ?? null, userId, input.orgId ?? null, input.disasterId ?? null]
-      );
-      return mapResource(rows[0]);
+      const client = await pool.connect();
+
+      try {
+        await client.query("BEGIN");
+
+        const normalizedName = typeof input.name === "string" ? input.name.trim() : "";
+        if (!normalizedName) {
+          throw new Error("Resource name is required.");
+        }
+
+        const quantityToAdd = Math.max(0, Number(input.quantity ?? 0));
+        const existingResourceResult = await client.query(
+          `SELECT *
+           FROM resources
+           WHERE lower(trim(name)) = lower(trim($1))
+           ORDER BY created_at DESC
+           LIMIT 1
+           FOR UPDATE`,
+          [normalizedName]
+        );
+
+        const existingResource = existingResourceResult.rows[0];
+
+        if (existingResource) {
+          const nextQuantity = Math.max(0, Number(existingResource.quantity ?? 0) + quantityToAdd);
+          const { rows } = await client.query(
+            `UPDATE resources
+             SET quantity = $2,
+                 location = COALESCE(${geoJsonSql(input.location)}, location),
+                 managed_by = $3,
+                 org_id = COALESCE($4, org_id),
+                 disaster_id = COALESCE($5, disaster_id),
+                 status = CASE
+                   WHEN $2 <= 0 THEN 'depleted'::resource_status
+                   WHEN $2 < 10 THEN 'low'::resource_status
+                   ELSE 'available'::resource_status
+                 END
+             WHERE id = $1
+             RETURNING *, ST_AsGeoJSON(location) AS location`,
+            [existingResource.id, nextQuantity, userId, input.orgId ?? null, input.disasterId ?? null]
+          );
+
+          await client.query("COMMIT");
+          return mapResource(rows[0]);
+        }
+
+        const { rows } = await client.query(
+          `INSERT INTO resources (name, category, quantity, unit, status, location, managed_by, org_id, disaster_id)
+           VALUES (
+             $1,
+             $2,
+             $3,
+             $4,
+             CASE
+               WHEN COALESCE($3, 0) <= 0 THEN 'depleted'::resource_status
+               WHEN COALESCE($3, 0) < 10 THEN 'low'::resource_status
+               ELSE 'available'::resource_status
+             END,
+             ${geoJsonSql(input.location)},
+             $5,
+             $6,
+             $7
+           )
+           RETURNING *, ST_AsGeoJSON(location) AS location`,
+          [
+            normalizedName,
+            input.category ?? null,
+            input.quantity ?? null,
+            input.unit ?? null,
+            userId,
+            input.orgId ?? null,
+            input.disasterId ?? null
+          ]
+        );
+
+        await client.query("COMMIT");
+        return mapResource(rows[0]);
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
     }
     case "updateResource": {
       requireGroup(event, ["ngo", "government"]);
