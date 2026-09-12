@@ -119,89 +119,105 @@ class _CitizenShellState extends State<CitizenShell> {
         ),
         child: Column(
           children: [
-            SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceLowest,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: const Icon(
-                        Icons.shield_rounded,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'CrisisConnect',
-                            style: Theme.of(context).textTheme.titleLarge
-                                ?.copyWith(
-                                  color: AppColors.primary,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                          ),
-                          Text(
-                            widget.session.username ?? AppLocalizations.of(context)!.citizenAccess,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: AppColors.outline),
-                          ),
-                        ],
-                      ),
-                    ),
-                    PopupMenuButton<String>(
-                      onSelected: (value) async {
-                        if (value == 'logout') {
-                          await widget.onSignOut();
-                        } else if (value == 'language') {
-                          _showLanguagePicker(context);
-                        }
-                      },
-                      itemBuilder: (ctx) => [
-                        PopupMenuItem<String>(
-                          value: 'language',
-                          child: Row(
-                            children: [
-                              const Icon(Icons.language_rounded, size: 20),
-                              const SizedBox(width: 8),
-                              Text(AppLocalizations.of(ctx)!.languageLabel),
-                            ],
-                          ),
-                        ),
-                        PopupMenuItem<String>(
-                          value: 'logout',
-                          child: Row(
-                            children: [
-                              const Icon(Icons.logout_rounded, size: 20),
-                              const SizedBox(width: 8),
-                              Text(AppLocalizations.of(ctx)!.signOut),
-                            ],
-                          ),
-                        ),
-                      ],
-                      child: Container(
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: AppColors.surfaceLowest,
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(24),
+                  bottomRight: Radius.circular(24),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.inverseSurface.withValues(alpha: 0.08),
+                    blurRadius: 14,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 10, 18, 14),
+                  child: Row(
+                    children: [
+                      Container(
                         width: 44,
                         height: 44,
                         decoration: BoxDecoration(
-                          color: AppColors.surfaceLowest,
+                          color: AppColors.background,
                           borderRadius: BorderRadius.circular(16),
                         ),
                         child: const Icon(
-                          Icons.more_horiz_rounded,
+                          Icons.shield_rounded,
                           color: AppColors.primary,
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'CrisisConnect',
+                              style: Theme.of(context).textTheme.titleLarge
+                                  ?.copyWith(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                            ),
+                            Text(
+                              widget.session.username ?? AppLocalizations.of(context)!.citizenAccess,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: AppColors.outline),
+                            ),
+                          ],
+                        ),
+                      ),
+                      PopupMenuButton<String>(
+                        onSelected: (value) async {
+                          if (value == 'logout') {
+                            await widget.onSignOut();
+                          } else if (value == 'language') {
+                            _showLanguagePicker(context);
+                          }
+                        },
+                        itemBuilder: (ctx) => [
+                          PopupMenuItem<String>(
+                            value: 'language',
+                            child: Row(
+                              children: [
+                                const Icon(Icons.language_rounded, size: 20),
+                                const SizedBox(width: 8),
+                                Text(AppLocalizations.of(ctx)!.languageLabel),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem<String>(
+                            value: 'logout',
+                            child: Row(
+                              children: [
+                                const Icon(Icons.logout_rounded, size: 20),
+                                const SizedBox(width: 8),
+                                Text(AppLocalizations.of(ctx)!.signOut),
+                              ],
+                            ),
+                          ),
+                        ],
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: AppColors.background,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Icon(
+                            Icons.more_horiz_rounded,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

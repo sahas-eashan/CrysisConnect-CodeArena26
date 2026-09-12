@@ -2,6 +2,7 @@ import 'package:crisisconnect_citizen/core/backend.dart';
 import 'package:crisisconnect_citizen/core/locale_notifier.dart';
 import 'package:crisisconnect_citizen/features/auth/auth_gate.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:crisisconnect_citizen/l10n/app_localizations.dart';
@@ -40,6 +41,16 @@ class _CrisisConnectAppState extends State<CrisisConnectApp> {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
           title: 'CrisisConnect Citizen',
+          builder: (context, child) {
+            return AnnotatedRegion<SystemUiOverlayStyle>(
+              value: const SystemUiOverlayStyle(
+                statusBarColor: AppColors.surfaceLowest,
+                statusBarIconBrightness: Brightness.dark,
+                statusBarBrightness: Brightness.light,
+              ),
+              child: child ?? const SizedBox.shrink(),
+            );
+          },
           localizationsDelegates: const [
             AppLocalizations.delegate,
             GlobalMaterialLocalizations.delegate,
