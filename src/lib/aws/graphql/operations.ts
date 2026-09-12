@@ -187,6 +187,7 @@ export const queries = {
         meta {
           status
           confidence
+          confidenceSource
           sourceIds
           warnings
           requiresHumanApproval
@@ -236,6 +237,16 @@ export const queries = {
 };
 
 export const mutations = {
+  updateMyLocation: /* GraphQL */ `
+    mutation UpdateMyLocation($latitude: Float!, $longitude: Float!) {
+      updateMyLocation(latitude: $latitude, longitude: $longitude)
+    }
+  `,
+  updateDisaster: /* GraphQL */ `
+    mutation UpdateDisaster($id: ID!, $input: DisasterInput!) {
+      updateDisaster(id: $id, input: $input) { id title severity type status affectedArea centerPoint radiusKm secondaryRisks }
+    }
+  `,
   createDisaster: /* GraphQL */ `
     mutation CreateDisaster($input: DisasterInput!) {
       createDisaster(input: $input) {
@@ -318,9 +329,14 @@ export const mutations = {
     mutation CreateSOS($input: SOSInput!) {
       createSOS(input: $input) {
         id
+        senderId
+        location
         type
-        status
         description
+        status
+        assignedTo
+        createdAt
+        resolvedAt
         nearestResponders {
           id
           fullName
@@ -334,8 +350,20 @@ export const mutations = {
     mutation AcceptSOS($id: ID!) {
       acceptSOS(id: $id) {
         id
+        senderId
+        location
+        type
+        description
         status
         assignedTo
+        createdAt
+        resolvedAt
+        nearestResponders {
+          id
+          fullName
+          phone
+          distance
+        }
       }
     }
   `,
@@ -343,9 +371,20 @@ export const mutations = {
     mutation ResolveSOS($id: ID!) {
       resolveSOS(id: $id) {
         id
+        senderId
+        location
+        type
+        description
         status
         assignedTo
+        createdAt
         resolvedAt
+        nearestResponders {
+          id
+          fullName
+          phone
+          distance
+        }
       }
     }
   `,
@@ -408,6 +447,7 @@ export const mutations = {
         meta {
           status
           confidence
+          confidenceSource
           sourceIds
           warnings
           requiresHumanApproval
@@ -445,6 +485,7 @@ export const mutations = {
         meta {
           status
           confidence
+          confidenceSource
           sourceIds
           warnings
           requiresHumanApproval
@@ -484,6 +525,7 @@ export const mutations = {
         meta {
           status
           confidence
+          confidenceSource
           sourceIds
           warnings
           requiresHumanApproval
@@ -526,6 +568,7 @@ export const mutations = {
         meta {
           status
           confidence
+          confidenceSource
           sourceIds
           warnings
           requiresHumanApproval
@@ -565,6 +608,7 @@ export const mutations = {
         meta {
           status
           confidence
+          confidenceSource
           sourceIds
           warnings
           requiresHumanApproval
@@ -601,6 +645,7 @@ export const mutations = {
         meta {
           status
           confidence
+          confidenceSource
           sourceIds
           warnings
           requiresHumanApproval

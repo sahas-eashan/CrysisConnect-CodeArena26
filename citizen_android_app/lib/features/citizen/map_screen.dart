@@ -1,13 +1,11 @@
 import 'dart:ui';
-import 'dart:convert';
 
 import 'package:crisisconnect_citizen/core/backend.dart';
+import 'package:crisisconnect_citizen/core/route_safety.dart';
 import 'package:crisisconnect_citizen/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key, required this.repository});
@@ -128,10 +126,7 @@ class _MapScreenState extends State<MapScreen> {
     bool showError = true,
   }) async {
     final existingLocation = currentLocation ?? _liveCurrentLocation;
-    if (existingLocation != null) {
-      if (recenter) {
-        _mapController.move(existingLocation, _focusZoom);
-      }
+    if (existingLocation != null && !recenter) {
       return existingLocation;
     }
 
@@ -159,6 +154,13 @@ class _MapScreenState extends State<MapScreen> {
       }
       _cacheNearestSafeZone(location);
       return location;
+    } catch (error) {
+      if (mounted && showError) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+      return null;
     } finally {
       if (mounted) {
         setState(() => _locatingUser = false);
@@ -182,20 +184,19 @@ class _MapScreenState extends State<MapScreen> {
     LatLng from,
     _MapDestination destination,
   ) async {
-    final l10n = AppLocalizations.of(context)!;
-
-    setState(() => _routeLoading = true);
+    setState(() {
+      _routeLoading = true;
+      _activeRoute = null;
+    });
 
     try {
-      final route = await _fetchRoute(from, destination.destination);
+      final hazards = await widget.repository.loadActiveHazards();
+      final route = await fetchScreenedRoute(
+        from: from,
+        to: destination.destination,
+        activeHazardGeometries: hazards.map((hazard) => hazard.affectedArea),
+      );
       if (!mounted) return;
-      if (route == null) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(l10n.routeNotFound)));
-        setState(() => _routeLoading = false);
-        return;
-      }
 
       setState(() {
         _activeRoute = _RouteInfo(
@@ -222,38 +223,6 @@ class _MapScreenState extends State<MapScreen> {
         context,
       ).showSnackBar(SnackBar(content: Text(error.toString())));
     }
-  }
-
-  Future<void> _openGoogleMapsDirections(_MapDestination destination) async {
-    final l10n = AppLocalizations.of(context)!;
-
-    final googleMapsUri = Uri.parse(
-      'google.navigation:q=${destination.destination.latitude},${destination.destination.longitude}&mode=d',
-    );
-    final browserFallbackUri = Uri.parse(
-      'https://www.google.com/maps/dir/?api=1&destination=${destination.destination.latitude},${destination.destination.longitude}&travelmode=driving',
-    );
-
-    try {
-      final openedInMaps = await launchUrl(
-        googleMapsUri,
-        mode: LaunchMode.externalApplication,
-      );
-      if (openedInMaps || !mounted) return;
-
-      final openedFallback = await launchUrl(
-        browserFallbackUri,
-        mode: LaunchMode.externalApplication,
-      );
-      if (openedFallback || !mounted) return;
-    } catch (_) {
-      if (!mounted) return;
-    }
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(l10n.googleMapsOpenFailed)));
   }
 
   _MapDestination _buildSafeZoneDestination(
@@ -299,43 +268,6 @@ class _MapScreenState extends State<MapScreen> {
       destination: resource.locationPoint!.latLng,
       icon: Icons.inventory_2_rounded,
       color: AppColors.primary,
-    );
-  }
-
-  Future<_RouteResult?> _fetchRoute(LatLng from, LatLng to) async {
-    final url = Uri.parse(
-      'https://router.project-osrm.org/route/v1/driving/'
-      '${from.longitude},${from.latitude};'
-      '${to.longitude},${to.latitude}'
-      '?overview=full&geometries=geojson',
-    );
-
-    final response = await http.get(url);
-    if (response.statusCode != 200) return null;
-
-    final data = jsonDecode(response.body);
-    final routes = data['routes'] as List<dynamic>?;
-    if (routes == null || routes.isEmpty) return null;
-
-    final route = routes[0];
-    final geometry = route['geometry'];
-    final coordinates = geometry['coordinates'] as List<dynamic>;
-    final distanceMeters = (route['distance'] as num).toDouble();
-    final durationSeconds = (route['duration'] as num).toDouble();
-
-    final points = coordinates
-        .map(
-          (coord) => LatLng(
-            (coord[1] as num).toDouble(),
-            (coord[0] as num).toDouble(),
-          ),
-        )
-        .toList();
-
-    return _RouteResult(
-      points: points,
-      distanceKm: distanceMeters / 1000,
-      durationMin: durationSeconds / 60,
     );
   }
 
@@ -568,8 +500,6 @@ class _MapScreenState extends State<MapScreen> {
                         _selectedDestination = _activeRoute!.destination;
                         _activeRoute = null;
                       }),
-                      onOpenInGoogleMaps: () =>
-                          _openGoogleMapsDirections(_activeRoute!.destination),
                     )
                   else if (nearestDestination != null &&
                       _selectedDestination == null)
@@ -592,7 +522,6 @@ class _MapScreenState extends State<MapScreen> {
                           : displayedDestination.kindLabel,
                       destination: displayedDestination,
                       primaryLabel: l10n.inAppDirections,
-                      secondaryLabel: l10n.openInGoogleMaps,
                       onClose: _selectedDestination == null
                           ? null
                           : () => setState(() => _selectedDestination = null),
@@ -600,8 +529,6 @@ class _MapScreenState extends State<MapScreen> {
                         displayedDestination,
                         currentLocation: currentLocation,
                       ),
-                      onOpenInGoogleMaps: () =>
-                          _openGoogleMapsDirections(displayedDestination),
                     ),
                   ],
                 ],
@@ -614,28 +541,11 @@ class _MapScreenState extends State<MapScreen> {
   }
 }
 
-class _RouteResult {
-  const _RouteResult({
-    required this.points,
-    required this.distanceKm,
-    required this.durationMin,
-  });
-
-  final List<LatLng> points;
-  final double distanceKm;
-  final double durationMin;
-}
-
 class _NavigationBar extends StatelessWidget {
-  const _NavigationBar({
-    required this.route,
-    required this.onCancel,
-    required this.onOpenInGoogleMaps,
-  });
+  const _NavigationBar({required this.route, required this.onCancel});
 
   final _RouteInfo route;
   final VoidCallback onCancel;
-  final VoidCallback onOpenInGoogleMaps;
 
   @override
   Widget build(BuildContext context) {
@@ -669,6 +579,10 @@ class _NavigationBar extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
+                const Text(
+                  'Checked against current reported hazards. Follow official instructions.',
+                  style: TextStyle(color: Colors.white, fontSize: 11),
+                ),
                 Text(
                   '${l10n.routeDistance(route.distanceKm.toStringAsFixed(1))}  •  ${l10n.routeDuration(route.durationMin.toStringAsFixed(0))}',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -678,16 +592,6 @@ class _NavigationBar extends StatelessWidget {
                 ),
               ],
             ),
-          ),
-          const SizedBox(width: 8),
-          IconButton(
-            onPressed: onOpenInGoogleMaps,
-            tooltip: l10n.openInGoogleMaps,
-            style: IconButton.styleFrom(
-              backgroundColor: Colors.white.withValues(alpha: 0.18),
-              foregroundColor: Colors.white,
-            ),
-            icon: const Icon(Icons.map_rounded),
           ),
           const SizedBox(width: 8),
           GestureDetector(
@@ -988,18 +892,14 @@ class _DestinationSheet extends StatelessWidget {
     required this.heading,
     required this.destination,
     required this.primaryLabel,
-    required this.secondaryLabel,
     required this.onStartNavigation,
-    required this.onOpenInGoogleMaps,
     this.onClose,
   });
 
   final String heading;
   final _MapDestination destination;
   final String primaryLabel;
-  final String secondaryLabel;
   final VoidCallback onStartNavigation;
-  final VoidCallback onOpenInGoogleMaps;
   final VoidCallback? onClose;
 
   @override
@@ -1169,15 +1069,6 @@ class _DestinationSheet extends StatelessWidget {
                 backgroundColor: destination.color,
                 foregroundColor: Colors.white,
               ),
-              const SizedBox(width: 8),
-              _SheetActionButton(
-                onPressed: onOpenInGoogleMaps,
-                tooltip: secondaryLabel,
-                icon: Icons.map_outlined,
-                backgroundColor: AppColors.surfaceLowest,
-                foregroundColor: AppColors.primary,
-                borderColor: AppColors.primary.withValues(alpha: 0.22),
-              ),
             ],
           ),
         ],
@@ -1193,7 +1084,6 @@ class _SheetActionButton extends StatelessWidget {
     required this.icon,
     required this.backgroundColor,
     required this.foregroundColor,
-    this.borderColor,
   });
 
   final VoidCallback onPressed;
@@ -1201,7 +1091,6 @@ class _SheetActionButton extends StatelessWidget {
   final IconData icon;
   final Color backgroundColor;
   final Color foregroundColor;
-  final Color? borderColor;
 
   @override
   Widget build(BuildContext context) {
@@ -1217,9 +1106,6 @@ class _SheetActionButton extends StatelessWidget {
           padding: EdgeInsets.zero,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(23),
-            side: borderColor == null
-                ? BorderSide.none
-                : BorderSide(color: borderColor!),
           ),
         ),
         child: Icon(icon, size: 22),

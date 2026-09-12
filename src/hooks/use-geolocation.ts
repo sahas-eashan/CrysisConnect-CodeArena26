@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { saveMyLocation } from "@/lib/aws/profile";
 
 type Coordinates = {
   latitude: number;
@@ -27,6 +28,8 @@ export function useGeolocation() {
         });
         setError(null);
         setLoading(false);
+        void saveMyLocation({ latitude: position.coords.latitude, longitude: position.coords.longitude })
+          .catch((saveError) => setError(saveError instanceof Error ? saveError.message : "Unable to save your location for area alerts."));
       },
       (positionError) => {
         setError(positionError.message);

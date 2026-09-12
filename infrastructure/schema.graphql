@@ -158,7 +158,8 @@ type AiTranslationSet {
 
 type AiResponseMeta {
   status: String!
-  confidence: Float!
+  confidence: Float
+  confidenceSource: String!
   sourceIds: [String!]!
   warnings: [String!]!
   requiresHumanApproval: Boolean!
@@ -245,6 +246,7 @@ type Query {
 }
 
 type Mutation {
+  updateMyLocation(latitude: Float!, longitude: Float!): Boolean!
   createDisaster(input: DisasterInput!): Disaster!
   updateDisaster(id: ID!, input: DisasterInput!): Disaster!
   createSafeZone(input: SafeZoneInput!): SafeZone!
@@ -283,6 +285,7 @@ type Subscription {
 }
 
 input DisasterInput {
+  status: String
   title: String!
   description: String
   type: String!

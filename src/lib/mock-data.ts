@@ -159,7 +159,8 @@ export const mockAiAuditLogs: AiAuditRef[] = [
 export const mockIncidentBrief: IncidentBrief = {
   meta: {
     status: "mock",
-    confidence: 0.84,
+    confidence: null,
+    confidenceSource: "unavailable",
     sourceIds: [mockDisasters[0].id, mockSafeZones[0].id, mockResources[0].id],
     warnings: ["Demo mode fallback: verify details with the live command team."],
     requiresHumanApproval: true,
@@ -205,7 +206,8 @@ export const mockIncidentBrief: IncidentBrief = {
 export const mockAlertDraft: AlertDraft = {
   meta: {
     status: "mock",
-    confidence: 0.87,
+    confidence: null,
+    confidenceSource: "unavailable",
     sourceIds: [mockDisasters[0].id],
     warnings: ["Human approval required before any public broadcast."],
     requiresHumanApproval: true,
@@ -245,7 +247,8 @@ export const mockAlertDraft: AlertDraft = {
 export const mockOperationsRecommendationSet: OperationsRecommendationSet = {
   meta: {
     status: "mock",
-    confidence: 0.81,
+    confidence: null,
+    confidenceSource: "unavailable",
     sourceIds: [mockDisasters[0].id, mockSOSSignals[0].id, mockResources[1].id],
     warnings: ["Operational ranking should be confirmed by the duty officer."],
     requiresHumanApproval: true,
@@ -290,7 +293,8 @@ export const mockOperationsRecommendationSet: OperationsRecommendationSet = {
 export const mockSosTriage: SosTriage = {
   meta: {
     status: "mock",
-    confidence: 0.8,
+    confidence: null,
+    confidenceSource: "unavailable",
     sourceIds: [mockSOSSignals[0].id, "ngo-demo-1", "ngo-demo-2"],
     warnings: ["Responder assignment remains a human approval action."],
     requiresHumanApproval: true,
@@ -326,7 +330,8 @@ export const mockSosTriage: SosTriage = {
 export const mockResourceDispatchPlan: ResourceDispatchPlan = {
   meta: {
     status: "mock",
-    confidence: 0.76,
+    confidence: null,
+    confidenceSource: "unavailable",
     sourceIds: [mockResourceRequests[0].id, mockResources[0].id],
     warnings: ["Inventory availability should be reconfirmed before dispatch."],
     requiresHumanApproval: true,
@@ -366,7 +371,8 @@ export const mockResourceDispatchPlan: ResourceDispatchPlan = {
 export const mockCitizenGuidance: CitizenGuidance = {
   meta: {
     status: "mock",
-    confidence: 0.82,
+    confidence: null,
+    confidenceSource: "unavailable",
     sourceIds: [mockDisasters[0].id, mockSafeZones[0].id, mockResources[0].id],
     warnings: ["Guidance is advisory and should be confirmed with official instructions."],
     requiresHumanApproval: false,
@@ -407,7 +413,8 @@ export const mockCitizenGuidance: CitizenGuidance = {
 export const mockPreparedSosSubmission: PreparedSosSubmission = {
   meta: {
     status: "mock",
-    confidence: 0.79,
+    confidence: null,
+    confidenceSource: "unavailable",
     sourceIds: [],
     warnings: ["Review before sending. AI cannot verify on-the-ground conditions."],
     requiresHumanApproval: true,

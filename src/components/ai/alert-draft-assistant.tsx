@@ -84,7 +84,7 @@ export function AlertDraftAssistant({
           <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
             <p className="text-sm font-medium text-white">AI metadata</p>
             <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted">
-              <Badge>{Math.round(draft.meta.confidence * 100)}% confidence</Badge>
+              <Badge>{draft.meta.confidence == null ? "Confidence unavailable" : `${Math.round(draft.meta.confidence * 100)}% model estimate (uncalibrated)`}</Badge>
               <Badge>{draft.meta.requiresHumanApproval ? "Human review required" : "Ready"}</Badge>
               <Badge>Audit: {draft.meta.audit.id}</Badge>
             </div>

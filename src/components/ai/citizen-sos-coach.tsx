@@ -94,7 +94,7 @@ export function CitizenSosCoach({
             </ul>
           </div>
           <div className="flex flex-wrap gap-3 text-xs text-muted">
-            <Badge>{Math.round(result.meta.confidence * 100)}% confidence</Badge>
+            <Badge>{result.meta.confidence == null ? "Confidence unavailable" : `${Math.round(result.meta.confidence * 100)}% model estimate (uncalibrated)`}</Badge>
             <Badge>{result.meta.requiresHumanApproval ? "Human review required" : "Ready"}</Badge>
           </div>
         </div>

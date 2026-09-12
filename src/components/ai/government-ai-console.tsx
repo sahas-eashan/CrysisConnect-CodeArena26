@@ -213,7 +213,7 @@ export function GovernmentAiConsole({ disasterId }: { disasterId?: string | null
       {brief ? (
         <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted">
           <Badge>{brief.meta.status === "completed" ? "Gemini live" : brief.meta.status}</Badge>
-          <Badge>{Math.round(brief.meta.confidence * 100)}% confidence</Badge>
+          <Badge>{brief.meta.confidence == null ? "Confidence unavailable" : `${Math.round(brief.meta.confidence * 100)}% model estimate (uncalibrated)`}</Badge>
           <Badge>{brief.meta.requiresHumanApproval ? "Human review required" : "Autonomous"}</Badge>
           <Badge>Audit: {brief.meta.audit.id}</Badge>
           {brief.meta.sourceIds.slice(0, 4).map((id) => (

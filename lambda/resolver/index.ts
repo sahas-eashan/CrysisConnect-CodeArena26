@@ -39,6 +39,7 @@ function getGroups(event: AppSyncEvent) {
 }
 
 function requireGroup(event: AppSyncEvent, allowed: string[]) {
+  if (!event.identity?.sub) throw new Error("Unauthorized");
   const groups = getGroups(event);
   if (allowed.some((group) => groups.includes(group))) return;
   throw new Error("Unauthorized");
@@ -99,9 +100,25 @@ async function ensureProfile(client: DbClient, event: AppSyncEvent, userId: stri
 }
 
 function geoJsonSql(value: string | null | undefined) {
-  return value && value.trim()
-    ? `ST_SetSRID(ST_GeomFromGeoJSON($$${value}$$), 4326)::geography`
-    : "NULL";
+  if (value == null || value.trim() === "") return "NULL";
+  const geometry = JSON.parse(value);
+  const validPosition = (position: unknown): boolean =>
+    Array.isArray(position) && position.length === 2 &&
+    position.every((coordinate) => typeof coordinate === "number" && Number.isFinite(coordinate)) &&
+    Math.abs(position[0]) <= 180 && Math.abs(position[1]) <= 90;
+  const validRing = (ring: unknown): boolean =>
+    Array.isArray(ring) && ring.length >= 4 && ring.every(validPosition) &&
+    ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1];
+  const validPolygon = (coordinates: unknown): boolean =>
+    Array.isArray(coordinates) && coordinates.length > 0 && coordinates.every(validRing);
+  const valid = geometry?.type === "Point" ? validPosition(geometry.coordinates)
+    : geometry?.type === "Polygon" ? validPolygon(geometry.coordinates)
+    : geometry?.type === "MultiPolygon" && Array.isArray(geometry.coordinates) &&
+      geometry.coordinates.length > 0 && geometry.coordinates.every(validPolygon);
+  if (!valid) throw new Error("Invalid GeoJSON geometry or coordinate range");
+  // Strip arbitrary properties and permit only a fixed type plus numeric arrays.
+  const sanitized = JSON.stringify({ type: geometry.type, coordinates: geometry.coordinates });
+  return `ST_SetSRID(ST_GeomFromGeoJSON($$${sanitized}$$), 4326)::geography`;
 }
 
 function mapDisaster(row: Record<string, any>) {
@@ -268,6 +285,22 @@ export async function handler(event: AppSyncEvent) {
   }
 
   switch (event.info.fieldName) {
+    case "updateMyLocation": {
+      if (!event.identity?.sub) throw new Error("Unauthorized");
+      const { latitude, longitude } = args;
+      if (typeof latitude !== "number" || typeof longitude !== "number" ||
+          !Number.isFinite(latitude) || !Number.isFinite(longitude) ||
+          Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
+        throw new Error("Invalid latitude or longitude");
+      }
+      const { rows } = await pool.query(
+        `UPDATE profiles SET location = ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography
+         WHERE id = $1 RETURNING id`,
+        [event.identity.sub, longitude, latitude]
+      );
+      if (!rows[0]) throw new Error("Profile not found");
+      return true;
+    }
     case "getDisasters": {
       const { rows } = await pool.query(
         `SELECT *, ST_AsGeoJSON(affected_area) AS affected_area, ST_AsGeoJSON(center_point) AS center_point
@@ -300,7 +333,7 @@ export async function handler(event: AppSyncEvent) {
       const { rows } = await pool.query(
         `SELECT *, ST_AsGeoJSON(location) AS location, ST_AsGeoJSON(boundary) AS boundary
          FROM safe_zones
-         WHERE current_occupancy < capacity AND status = 'active'
+         WHERE current_occupancy < capacity AND status = 'active' AND location IS NOT NULL
          ORDER BY ST_Distance(location, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography)
          LIMIT 1`,
         [args.lon, args.lat]
@@ -464,6 +497,9 @@ export async function handler(event: AppSyncEvent) {
     case "updateDisaster": {
       requireGroup(event, ["government"]);
       const input = args.input;
+      if (input.status != null && !["active", "monitoring", "resolved"].includes(input.status)) {
+        throw new Error("Invalid disaster status");
+      }
       const { rows } = await pool.query(
         `UPDATE disasters
          SET title = $2,
@@ -474,11 +510,13 @@ export async function handler(event: AppSyncEvent) {
              center_point = ${geoJsonSql(input.centerPoint)},
              radius_km = $6,
              secondary_risks = $7,
+             status = COALESCE($8::disaster_status, status),
              updated_at = now()
          WHERE id = $1
          RETURNING *, ST_AsGeoJSON(affected_area) AS affected_area, ST_AsGeoJSON(center_point) AS center_point`,
-        [args.id, input.title, input.description ?? null, input.type, input.severity, input.radiusKm ?? null, input.secondaryRisks ?? []]
+        [args.id, input.title, input.description ?? null, input.type, input.severity, input.radiusKm ?? null, input.secondaryRisks ?? [], input.status ?? null]
       );
+      if (!rows[0]) throw new Error("Disaster not found");
       return mapDisaster(rows[0]);
     }
     case "createSafeZone": {
@@ -762,10 +800,17 @@ export async function handler(event: AppSyncEvent) {
       }
     }
     case "createSOS": {
+      if (!event.identity?.sub) throw new Error("Unauthorized");
       const input = args.input;
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
+        if (input.location) {
+          await client.query(
+            `UPDATE profiles SET location = ${geoJsonSql(input.location)} WHERE id = $1`,
+            [userId]
+          );
+        }
         const insert = await client.query(
           `INSERT INTO sos_signals (sender_id, location, type, description, status, disaster_id)
            VALUES ($1, ${geoJsonSql(input.location)}, $2, $3, 'pending', $4)

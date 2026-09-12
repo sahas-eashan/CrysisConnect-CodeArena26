@@ -92,7 +92,7 @@ export function CitizenGuidanceCard({ disasterId }: { disasterId?: string | null
 
           <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
             <Badge>{guidance.meta.status === "completed" ? "Gemini live" : guidance.meta.status}</Badge>
-            <Badge>{Math.round(guidance.meta.confidence * 100)}% confidence</Badge>
+            <Badge>{guidance.meta.confidence == null ? "Confidence unavailable" : `${Math.round(guidance.meta.confidence * 100)}% model estimate (uncalibrated)`}</Badge>
             <Badge>Sources: {guidance.meta.sourceIds.join(", ") || "live context"}</Badge>
             {guidance.meta.warnings.length ? (
               <span className="inline-flex items-center gap-1 text-amber-200">

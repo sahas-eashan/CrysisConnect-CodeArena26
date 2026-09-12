@@ -54,7 +54,7 @@ export function NgoSosAiAssist({ sosId }: { sosId?: string | null }) {
           <div className="flex flex-wrap gap-3 text-xs text-muted">
             <Badge>{triage.severity}</Badge>
             <Badge>{triage.urgency}</Badge>
-            <Badge>{Math.round(triage.meta.confidence * 100)}% confidence</Badge>
+            <Badge>{triage.meta.confidence == null ? "Confidence unavailable" : `${Math.round(triage.meta.confidence * 100)}% model estimate (uncalibrated)`}</Badge>
             <Badge>{triage.meta.requiresHumanApproval ? "Human review required" : "Ready"}</Badge>
           </div>
           <p className="text-sm text-slate-300">{triage.rationale.summary}</p>
@@ -132,7 +132,7 @@ export function NgoResourceAiAssist({
       {plan ? (
         <div className="mt-6 space-y-3">
           <div className="flex flex-wrap gap-3 text-xs text-muted">
-            <Badge>{Math.round(plan.meta.confidence * 100)}% confidence</Badge>
+            <Badge>{plan.meta.confidence == null ? "Confidence unavailable" : `${Math.round(plan.meta.confidence * 100)}% model estimate (uncalibrated)`}</Badge>
             <Badge>{plan.meta.requiresHumanApproval ? "Human review required" : "Ready"}</Badge>
           </div>
           <p className="text-sm text-slate-300">{plan.rationale.summary}</p>

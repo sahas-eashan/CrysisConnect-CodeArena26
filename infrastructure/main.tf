@@ -41,6 +41,7 @@ resource "terraform_data" "package_lambdas" {
     filesha256("${path.module}/../lambda/worker/package-lock.json"),
     filesha256("${path.module}/../lambda/worker/tsconfig.json"),
     filesha256("${path.module}/../lambda/ai/index.ts"),
+    filesha256("${path.module}/../lambda/ai/confidence.ts"),
     filesha256("${path.module}/../lambda/ai/package.json"),
     filesha256("${path.module}/../lambda/ai/package-lock.json"),
     filesha256("${path.module}/../lambda/ai/tsconfig.json")

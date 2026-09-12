@@ -160,7 +160,8 @@ export type AiTranslationSet = {
 
 export type AiResponseMeta = {
   status: string;
-  confidence: number;
+  confidence: number | null;
+  confidenceSource: "model_estimate_uncalibrated" | "unavailable";
   sourceIds: string[];
   warnings: string[];
   requiresHumanApproval: boolean;

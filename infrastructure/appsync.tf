@@ -55,6 +55,7 @@ locals {
     "Query.getOrganizations"           = "Query"
     "Query.getDashboardStats"          = "Query"
     "Mutation.createDisaster"          = "Mutation"
+    "Mutation.updateMyLocation"        = "Mutation"
     "Mutation.updateDisaster"          = "Mutation"
     "Mutation.createSafeZone"          = "Mutation"
     "Mutation.updateSafeZoneOccupancy" = "Mutation"

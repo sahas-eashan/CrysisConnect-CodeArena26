@@ -22,6 +22,8 @@ class _SosScreenState extends State<SosScreen> {
   final TextEditingController _descriptionController = TextEditingController();
   PreparedSos? _preparedSos;
   bool _preparing = false;
+  bool _sending = false;
+  String? _submissionError;
 
   @override
   void initState() {
@@ -53,6 +55,11 @@ class _SosScreenState extends State<SosScreen> {
   }
 
   Future<void> _sendSos() async {
+    if (_sending) return;
+    setState(() {
+      _sending = true;
+      _submissionError = null;
+    });
     final l10n = AppLocalizations.of(context)!;
     try {
       final signal = await widget.repository.createSos(
@@ -66,16 +73,17 @@ class _SosScreenState extends State<SosScreen> {
         _liveSignals.removeWhere((item) => item.id == signal.id);
         _liveSignals.insert(0, signal);
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.sosSent)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.sosSent)));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.toString().replaceFirst('Exception: ', '')),
-        ),
+      setState(
+        () => _submissionError =
+            'Submission not confirmed. ${error.toString().replaceFirst('Exception: ', '')} Your details are retained. Check My SOS before retrying.',
       );
+    } finally {
+      if (mounted) setState(() => _sending = false);
     }
   }
 
@@ -168,9 +176,18 @@ class _SosScreenState extends State<SosScreen> {
                 ),
               ),
               const SizedBox(height: 24),
+              if (_submissionError != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Text(
+                    _submissionError!,
+                    style: const TextStyle(color: AppColors.secondary),
+                  ),
+                ),
+              if (_sending) const LinearProgressIndicator(),
               Center(
                 child: GestureDetector(
-                  onLongPress: _sendSos,
+                  onLongPress: _sending ? null : _sendSos,
                   child: Container(
                     width: 240,
                     height: 240,
@@ -355,7 +372,9 @@ class _ResponderStatusCard extends StatelessWidget {
                 ),
                 if (responder?.distance != null)
                   Text(
-                    l10n.kmAway((responder!.distance! / 1000).toStringAsFixed(1)),
+                    l10n.kmAway(
+                      (responder!.distance! / 1000).toStringAsFixed(1),
+                    ),
                     style: Theme.of(
                       context,
                     ).textTheme.bodySmall?.copyWith(color: AppColors.outline),

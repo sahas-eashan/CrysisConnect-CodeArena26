@@ -1,4 +1,5 @@
 import { Pool } from "pg";
+import { modelConfidence, confidenceProvenance, confidenceWarning } from "./confidence.js";
 
 type AppSyncEvent = {
   arguments: Record<string, any>;
@@ -21,7 +22,7 @@ type AuditInsert = {
   model: string;
   status: string;
   reviewStatus: string;
-  confidence: number;
+  confidence: number | null;
   sourceIds: string[];
   warnings: string[];
   riskFlags: {
@@ -182,7 +183,7 @@ function aiMeta(
   audit: any,
   overrides: {
     status: string;
-    confidence: number;
+    confidence: number | null;
     sourceIds: string[];
     warnings: string[];
     requiresHumanApproval: boolean;
@@ -192,6 +193,7 @@ function aiMeta(
   return {
     status: overrides.status,
     confidence: overrides.confidence,
+    confidenceSource: confidenceProvenance(overrides.confidence),
     sourceIds: overrides.sourceIds,
     warnings: overrides.warnings,
     requiresHumanApproval: overrides.requiresHumanApproval,
@@ -212,6 +214,7 @@ function mapAudit(row: DbRow) {
 }
 
 async function insertAuditLog(entry: AuditInsert) {
+  entry.warnings.push(confidenceWarning(entry.confidence, entry.riskFlags.blocked));
   const { rows } = await pool.query(
     `INSERT INTO ai_audit_logs (
       action, role, user_id, model, status, review_status, confidence, source_ids, warnings,
@@ -455,9 +458,9 @@ function createSchemaInstruction(schema: Record<string, unknown>) {
 }
 
 function mapSchemaPrimitive(value: string) {
-  if (value === "string|null") {
+  if (value === "string|null" || value === "number|null") {
     return {
-      type: "string",
+      type: value.split("|")[0],
       nullable: true
     };
   }
@@ -530,6 +533,9 @@ async function callGemini<T>({
   schema: Record<string, unknown>;
 }) {
   if (!GEMINI_API_KEY) return null;
+
+  schema = { ...schema, confidence: "number|null" };
+  systemInstruction += " Include confidence as your numeric self-estimate from 0 to 1 based only on the supplied evidence, or null when unavailable. This is not a calibrated probability.";
 
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
@@ -742,12 +748,12 @@ async function generateCitizenGuidance(event: AppSyncEvent) {
     ? await queryOne(
         `SELECT id, name
          FROM safe_zones
-         WHERE status = 'active'
+         WHERE status = 'active' AND location IS NOT NULL
          ORDER BY ST_Distance(location, ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)::geography)
          LIMIT 1`,
         [profile.location]
       )
-    : await queryOne(`SELECT id, name FROM safe_zones WHERE status = 'active' ORDER BY created_at DESC LIMIT 1`);
+    : null;
 
   const resources = await queryMany(
     `SELECT id, name
@@ -809,7 +815,7 @@ async function generateCitizenGuidance(event: AppSyncEvent) {
       model: INTERACTIVE_MODEL,
       status: "completed",
       reviewStatus: "not_required",
-      confidence: 0.86,
+      confidence: modelConfidence(generated),
       sourceIds: sourceIdList,
       warnings,
       riskFlags,
@@ -821,7 +827,7 @@ async function generateCitizenGuidance(event: AppSyncEvent) {
       ...payload,
       meta: aiMeta(audit, {
         status: "completed",
-        confidence: 0.86,
+        confidence: modelConfidence(generated),
         sourceIds: sourceIdList,
         warnings,
         requiresHumanApproval: false,
@@ -847,7 +853,7 @@ async function generatePreparedSos(event: AppSyncEvent) {
 
   let payload = fallbackPreparedSos(input);
   let status = riskFlags.blocked ? "blocked" : "completed";
-  let confidence = riskFlags.blocked ? 0.15 : 0.83;
+  let confidence: number | null = null;
 
   if (!riskFlags.blocked) {
     try {
@@ -879,6 +885,7 @@ async function generatePreparedSos(event: AppSyncEvent) {
       });
 
       if (generated && typeof generated.refined === "string") {
+        confidence = modelConfidence(generated);
         payload = {
           original: typeof generated.original === "string" ? generated.original : input.description,
           refined: generated.refined,
@@ -1044,7 +1051,7 @@ async function generateIncidentBrief(event: AppSyncEvent) {
         model: modelUsed,
         status: "completed",
         reviewStatus: "pending_review",
-        confidence: 0.89,
+        confidence: modelConfidence(generated),
         sourceIds: sourceIdList,
         warnings,
         riskFlags,
@@ -1056,7 +1063,7 @@ async function generateIncidentBrief(event: AppSyncEvent) {
         ...payload,
         meta: aiMeta(audit, {
           status: "completed",
-          confidence: 0.89,
+          confidence: modelConfidence(generated),
           sourceIds: sourceIdList,
           warnings,
           requiresHumanApproval: true,
@@ -1084,7 +1091,7 @@ async function generateAlertDraft(event: AppSyncEvent) {
 
   let payload = fallbackAlertDraft(input, disaster);
   let status = riskFlags.blocked ? "blocked" : "completed";
-  let confidence = riskFlags.blocked ? 0.18 : 0.86;
+  let confidence: number | null = null;
 
   if (!riskFlags.blocked) {
     try {
@@ -1117,6 +1124,7 @@ async function generateAlertDraft(event: AppSyncEvent) {
       });
 
       if (generated && typeof generated.title === "string") {
+        confidence = modelConfidence(generated);
         payload = {
           title: generated.title,
           channel: ensureStringArray((generated as any).channel),
@@ -1236,7 +1244,7 @@ async function recommendOperations(event: AppSyncEvent) {
         model: INTERACTIVE_MODEL,
         status: "completed",
         reviewStatus: "pending_review",
-        confidence: 0.85,
+        confidence: modelConfidence(generated),
         sourceIds: sources,
         warnings,
         riskFlags,
@@ -1248,7 +1256,7 @@ async function recommendOperations(event: AppSyncEvent) {
         ...payload,
         meta: aiMeta(audit, {
           status: "completed",
-          confidence: 0.85,
+          confidence: modelConfidence(generated),
           sourceIds: sources,
           warnings,
           requiresHumanApproval: true,
@@ -1294,7 +1302,7 @@ async function triageSosCase(event: AppSyncEvent) {
   const warnings = ["Responder assignment remains a human approval action."];
   let payload = fallbackSosTriage(sos, responders);
   let status = riskFlags.blocked ? "blocked" : "completed";
-  let confidence = riskFlags.blocked ? 0.2 : 0.84;
+  let confidence: number | null = null;
 
   if (!riskFlags.blocked) {
     try {
@@ -1330,6 +1338,7 @@ async function triageSosCase(event: AppSyncEvent) {
       });
 
       if (generated) {
+        confidence = modelConfidence(generated);
         payload = {
           sosId: typeof (generated as any).sosId === "string" ? (generated as any).sosId : sos?.id ?? null,
           severity: typeof (generated as any).severity === "string" ? (generated as any).severity : payload.severity,
@@ -1395,7 +1404,7 @@ async function recommendResourceDispatch(event: AppSyncEvent) {
   const riskFlags = buildRiskFlags(String(request?.resource_name ?? ""));
   let payload = fallbackResourceDispatch(request, resources);
   let status = riskFlags.blocked ? "blocked" : "completed";
-  let confidence = riskFlags.blocked ? 0.2 : 0.82;
+  let confidence: number | null = null;
 
   if (!riskFlags.blocked) {
     try {
@@ -1428,6 +1437,7 @@ async function recommendResourceDispatch(event: AppSyncEvent) {
       });
 
       if (generated) {
+        confidence = modelConfidence(generated);
         payload = {
           requestId: typeof (generated as any).requestId === "string" ? (generated as any).requestId : request?.id ?? null,
           rationale: validateRationale((generated as any).rationale),

@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'sos_confirmation.dart';
+
 import 'package:amplify_api/amplify_api.dart';
 import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
 import 'package:amplify_flutter/amplify_flutter.dart';
@@ -495,6 +497,7 @@ class AiResponseMeta {
   const AiResponseMeta({
     required this.status,
     required this.confidence,
+    this.confidenceSource = 'unavailable',
     required this.sourceIds,
     required this.warnings,
     required this.requiresHumanApproval,
@@ -504,7 +507,8 @@ class AiResponseMeta {
   factory AiResponseMeta.fromJson(Map<String, dynamic> json) {
     return AiResponseMeta(
       status: json['status'] as String? ?? 'unknown',
-      confidence: (json['confidence'] as num?)?.toDouble() ?? 0,
+      confidence: _confidence(json['confidence']),
+      confidenceSource: json['confidenceSource'] as String? ?? 'unavailable',
       sourceIds: (json['sourceIds'] as List<dynamic>? ?? const [])
           .map((item) => item.toString())
           .toList(),
@@ -519,7 +523,13 @@ class AiResponseMeta {
   }
 
   final String status;
-  final double confidence;
+  final double? confidence;
+  final String confidenceSource;
+
+  static double? _confidence(dynamic value) =>
+      value is num && value.isFinite && value >= 0 && value <= 1
+      ? value.toDouble()
+      : null;
   final List<String> sourceIds;
   final List<String> warnings;
   final bool requiresHumanApproval;
@@ -796,6 +806,7 @@ class AppGraphQL {
         meta {
           status
           confidence
+          confidenceSource
           sourceIds
           warnings
           requiresHumanApproval
@@ -868,6 +879,12 @@ class AppGraphQL {
     }
   ''';
 
+  static const updateMyLocation = '''
+    mutation UpdateMyLocation(\$latitude: Float!, \$longitude: Float!) {
+      updateMyLocation(latitude: \$latitude, longitude: \$longitude)
+    }
+  ''';
+
   static const createSos = '''
     mutation CreateSOS(\$input: SOSInput!) {
       createSOS(input: \$input) {
@@ -904,6 +921,7 @@ class AppGraphQL {
         meta {
           status
           confidence
+          confidenceSource
           sourceIds
           warnings
           requiresHumanApproval
@@ -1190,7 +1208,7 @@ class AmplifyBackend {
         if (forcePrompt) {
           await Geolocator.openLocationSettings();
         }
-        return await Geolocator.getLastKnownPosition();
+        return null;
       }
 
       var permission = await Geolocator.checkPermission();
@@ -1201,11 +1219,11 @@ class AmplifyBackend {
         if (forcePrompt) {
           await Geolocator.openAppSettings();
         }
-        return await Geolocator.getLastKnownPosition();
+        return null;
       }
 
       if (permission == LocationPermission.denied) {
-        return await Geolocator.getLastKnownPosition();
+        return null;
       }
 
       final lastKnown = await Geolocator.getLastKnownPosition();
@@ -1217,9 +1235,9 @@ class AmplifyBackend {
           ),
         ).timeout(const Duration(seconds: 12));
       } on TimeoutException {
-        return lastKnown;
+        return forcePrompt ? null : lastKnown;
       } catch (_) {
-        return lastKnown;
+        return forcePrompt ? null : lastKnown;
       }
     } catch (_) {
       return null;
@@ -1323,7 +1341,34 @@ class CitizenRepository {
       forcePrompt: forcePrompt,
     );
     if (position == null) return null;
+    if (forcePrompt) await _persistPosition(position);
     return LatLng(position.latitude, position.longitude);
+  }
+
+  Future<void> _persistPosition(Position position) async {
+    final saved = await _backend.mutateRoot(
+      AppGraphQL.updateMyLocation,
+      "updateMyLocation",
+      variables: {
+        "latitude": position.latitude,
+        "longitude": position.longitude,
+      },
+    );
+    if (saved != true) {
+      throw Exception("Your location could not be saved. Please retry.");
+    }
+  }
+
+  Future<List<Disaster>> loadActiveHazards() async {
+    final value = await _backend.queryRoot(
+      AppGraphQL.getDisasters,
+      "getDisasters",
+      variables: const {"status": "active"},
+    );
+    if (value is! List) throw Exception("Active hazard data is unavailable.");
+    return value
+        .map((row) => Disaster.fromJson(row as Map<String, dynamic>))
+        .toList();
   }
 
   Future<SafeZone?> loadNearestSafeZoneForLocation(LatLng? location) async {
@@ -1428,7 +1473,7 @@ class CitizenRepository {
     final location = GeoJsonCodec.encodePoint(
       GeoJsonCodec.fromPosition(position),
     );
-    final result = await _mutateRootOrFallback(
+    final result = await _backend.mutateRoot(
       AppGraphQL.createSos,
       'createSOS',
       variables: {
@@ -1438,13 +1483,8 @@ class CitizenRepository {
           'location': location,
         },
       },
-      fallback: () => _buildSyntheticSos(
-        type: type,
-        description: description,
-        location: location,
-      ),
     );
-    return SosSignal.fromJson(result as Map<String, dynamic>);
+    return SosSignal.fromJson(requireSosConfirmation(result));
   }
 
   Future<PreparedSos> prepareSosSubmission({
@@ -1541,42 +1581,6 @@ class CitizenRepository {
       }
       rethrow;
     }
-  }
-
-  Future<dynamic> _mutateRootOrFallback(
-    String document,
-    String rootKey, {
-    required FutureOr<dynamic> Function() fallback,
-    Map<String, dynamic> variables = const {},
-  }) async {
-    try {
-      return await _backend.mutateRoot(document, rootKey, variables: variables);
-    } catch (error) {
-      final message = error.toString();
-      if (_isNullableResolverMismatch(message, rootKey)) {
-        return await fallback();
-      }
-      rethrow;
-    }
-  }
-
-  Map<String, dynamic> _buildSyntheticSos({
-    required String type,
-    String? description,
-    required String location,
-  }) {
-    return {
-      'id': 'pending-${DateTime.now().millisecondsSinceEpoch}',
-      'senderId': null,
-      'location': location,
-      'type': type,
-      'description': description,
-      'status': 'pending',
-      'assignedTo': null,
-      'createdAt': DateTime.now().toIso8601String(),
-      'resolvedAt': null,
-      'nearestResponders': const [],
-    };
   }
 
   bool _isNullableResolverMismatch(String message, String rootKey) {
