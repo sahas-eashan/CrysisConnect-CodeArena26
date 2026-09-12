@@ -209,10 +209,31 @@ export const mutations = {
     mutation RequestResource($input: ResourceRequestInput!) {
       requestResource(input: $input) {
         id
+        requestedBy
+        resourceId
         resourceName
         quantityNeeded
         urgency
         status
+        fulfilledBy
+        createdAt
+        location
+      }
+    }
+  `,
+  fulfillResourceRequest: /* GraphQL */ `
+    mutation FulfillResourceRequest($id: ID!) {
+      fulfillResourceRequest(id: $id) {
+        id
+        requestedBy
+        resourceId
+        resourceName
+        quantityNeeded
+        urgency
+        status
+        fulfilledBy
+        createdAt
+        location
       }
     }
   `,

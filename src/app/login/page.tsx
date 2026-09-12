@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
+import { fetchAuthSession } from "aws-amplify/auth";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
@@ -15,6 +16,12 @@ const roleRedirects: Record<string, string> = {
   government: "/admin/dashboard"
 };
 
+function roleFromGroups(groups: string[]) {
+  if (groups.includes("government")) return "government";
+  if (groups.includes("ngo")) return "ngo";
+  return "citizen";
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const { completeNewPassword, login } = useAuth();
@@ -22,6 +29,7 @@ export default function LoginPage() {
   const [mode, setMode] = useState<"signIn" | "newPassword">("signIn");
   const [loading, setLoading] = useState(false);
   const [pendingRole, setPendingRole] = useState("citizen");
+  const hasAwsConfig = Boolean(process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -29,7 +37,7 @@ export default function LoginPage() {
     setError(null);
 
     const form = new FormData(event.currentTarget);
-    const role = String(form.get("role") || pendingRole || "citizen");
+    const fallbackRole = String(form.get("role") || pendingRole || "citizen");
 
     try {
       if (mode === "newPassword") {
@@ -41,13 +49,20 @@ export default function LoginPage() {
         const result = await login(email, password);
 
         if (result.status === "newPasswordRequired") {
-          setPendingRole(role);
+          setPendingRole(fallbackRole);
           setMode("newPassword");
           setError(
             "This Cognito user was created with a temporary password. Set a new password to finish the first login."
           );
           return;
         }
+      }
+
+      let role = fallbackRole;
+      if (hasAwsConfig) {
+        const session = await fetchAuthSession();
+        const groups = (session.tokens?.idToken?.payload["cognito:groups"] as string[] | undefined) ?? [];
+        role = roleFromGroups(groups);
       }
 
       await fetch("/api/auth/session", {
@@ -81,16 +96,22 @@ export default function LoginPage() {
             <>
               <Input name="email" placeholder="Email or phone" required />
               <Input name="password" placeholder="Password" required type="password" />
-              <select
-                className="w-full rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm"
-                defaultValue={pendingRole}
-                name="role"
-                onChange={(event) => setPendingRole(event.target.value)}
-              >
-                <option value="citizen">Citizen</option>
-                <option value="ngo">NGO / Field worker</option>
-                <option value="government">Government admin</option>
-              </select>
+              {hasAwsConfig ? (
+                <p className="rounded-xl border border-slate-700 bg-slate-950/40 px-3 py-2 text-sm text-muted">
+                  Portal access is determined from your actual Cognito group membership after sign-in.
+                </p>
+              ) : (
+                <select
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm"
+                  defaultValue={pendingRole}
+                  name="role"
+                  onChange={(event) => setPendingRole(event.target.value)}
+                >
+                  <option value="citizen">Citizen</option>
+                  <option value="ngo">NGO / Field worker</option>
+                  <option value="government">Government admin</option>
+                </select>
+              )}
             </>
           )}
           {error ? <p className="text-sm text-danger">{error}</p> : null}

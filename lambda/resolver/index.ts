@@ -47,17 +47,19 @@ function requireGroup(event: AppSyncEvent, allowed: string[]) {
 function getProfileRole(event: AppSyncEvent) {
   const groups = getGroups(event);
   if (groups.includes("government")) return "government";
+  if (groups.includes("ngo")) return "ngo_org_member";
   if (groups.includes("ngo_org_member")) return "ngo_org_member";
   if (groups.includes("ngo_individual")) return "ngo_individual";
 
   const roleClaim = event.identity?.claims?.["custom:role"];
   if (
     roleClaim === "government" ||
+    roleClaim === "ngo" ||
     roleClaim === "ngo_org_member" ||
     roleClaim === "ngo_individual" ||
     roleClaim === "citizen"
   ) {
-    return roleClaim;
+    return roleClaim === "ngo" ? "ngo_org_member" : roleClaim;
   }
 
   return "citizen";
@@ -77,7 +79,10 @@ async function ensureProfile(client: DbClient, event: AppSyncEvent, userId: stri
     `INSERT INTO profiles (id, role, full_name, phone, email, is_available)
      VALUES ($1, $2::user_role, $3, $4, $5, true)
      ON CONFLICT (id) DO UPDATE
-     SET role = COALESCE(profiles.role, EXCLUDED.role),
+     SET role = CASE
+           WHEN profiles.role = 'citizen'::user_role AND EXCLUDED.role <> 'citizen'::user_role THEN EXCLUDED.role
+           ELSE profiles.role
+         END,
          full_name = COALESCE(NULLIF(profiles.full_name, ''), EXCLUDED.full_name),
          phone = COALESCE(profiles.phone, EXCLUDED.phone),
          email = COALESCE(profiles.email, EXCLUDED.email)`,
@@ -227,6 +232,10 @@ async function triggerWorker(payload: Record<string, any>) {
 export async function handler(event: AppSyncEvent) {
   const userId = event.identity?.sub ?? "system";
   const args = event.arguments ?? {};
+
+  if (event.info.parentTypeName === "Mutation" && userId !== "system") {
+    await ensureProfile(pool, event, userId);
+  }
 
   switch (event.info.fieldName) {
     case "getDisasters": {
@@ -485,7 +494,6 @@ export async function handler(event: AppSyncEvent) {
     }
     case "requestResource": {
       const input = args.input;
-      await ensureProfile(pool, event, userId);
       const { rows } = await pool.query(
         `INSERT INTO resource_requests (requested_by, resource_id, resource_name, quantity_needed, urgency, status, location)
          VALUES ($1, $2, $3, $4, $5, 'pending', ${geoJsonSql(input.location)})
@@ -496,6 +504,7 @@ export async function handler(event: AppSyncEvent) {
     }
     case "fulfillResourceRequest": {
       requireGroup(event, ["ngo", "government"]);
+      await ensureProfile(pool, event, userId);
       const { rows } = await pool.query(
         `UPDATE resource_requests
          SET status = 'fulfilled', fulfilled_by = $2
@@ -510,7 +519,6 @@ export async function handler(event: AppSyncEvent) {
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
-        await ensureProfile(client, event, userId);
         const insert = await client.query(
           `INSERT INTO sos_signals (sender_id, location, type, description, status, disaster_id)
            VALUES ($1, ${geoJsonSql(input.location)}, $2, $3, 'pending', $4)
