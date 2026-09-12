@@ -4,6 +4,7 @@ import Link from "next/link";
 import { LogOut } from "lucide-react";
 
 import { NotificationBell } from "@/components/shared/notification-bell";
+
 export function Navbar({
   title,
   subtitle
