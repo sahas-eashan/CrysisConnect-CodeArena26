@@ -1,14 +1,58 @@
-export { default } from "./page.live"; /*
+"use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
+import { generateClient } from "aws-amplify/api";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { configureAmplify } from "@/lib/aws/amplify";
+import { queries } from "@/lib/aws/graphql/operations";
 import { mockResourceRequests, mockResources } from "@/lib/mock-data";
+import type { Resource } from "@/lib/types";
 
 export default function CitizenResourcesPage() {
+  const hasAwsConfig = Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL);
+  const [resources, setResources] = useState<Resource[]>(() => (hasAwsConfig ? [] : mockResources));
   const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL));
+
+  useEffect(() => {
+    if (!hasAwsConfig) return;
+
+    let active = true;
+
+    async function loadResources() {
+      configureAmplify();
+      const client = generateClient();
+
+      try {
+        setLoading(true);
+        setError(null);
+
+        const result = await client.graphql({ query: queries.getResources });
+        if (!active) return;
+
+        setResources(((result as any).data?.getResources ?? []) as Resource[]);
+      } catch (loadError) {
+        if (!active) return;
+
+        setResources([]);
+        setError(loadError instanceof Error ? loadError.message : "Unable to load resources from the backend.");
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void loadResources();
+
+    return () => {
+      active = false;
+    };
+  }, [hasAwsConfig]);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -20,22 +64,34 @@ export default function CitizenResourcesPage() {
       <Card>
         <CardTitle>Available essentials</CardTitle>
         <CardDescription className="mt-2">
-          Browse current inventory published by NGOs and field teams.
+          Browse current inventory fetched from the backend database.
         </CardDescription>
+        {error ? (
+          <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            {error}
+          </div>
+        ) : null}
         <div className="mt-6 space-y-3">
-          {mockResources.map((resource) => (
+          {resources.map((resource) => (
             <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4" key={resource.id}>
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="font-medium text-white">{resource.name}</p>
                   <p className="mt-1 text-sm text-muted">
-                    {resource.category} • {resource.quantity} {resource.unit}
+                    {resource.category ?? "uncategorized"} | {resource.quantity ?? 0} {resource.unit ?? "units"}
                   </p>
                 </div>
-                <span className="rounded-full bg-slate-900 px-3 py-1 text-xs text-slate-300">{resource.status}</span>
+                <span className="rounded-full bg-slate-900 px-3 py-1 text-xs text-slate-300">
+                  {resource.status ?? "unknown"}
+                </span>
               </div>
             </div>
           ))}
+          {!resources.length && !loading ? (
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-muted">
+              No live resources were returned from the database.
+            </div>
+          ) : null}
         </div>
       </Card>
 
@@ -71,4 +127,3 @@ export default function CitizenResourcesPage() {
     </div>
   );
 }
-*/
