@@ -57,6 +57,38 @@ variable "notification_sender_id" {
   default     = "CRISISAPP"
 }
 
+variable "notifylk_user_id" {
+  description = "Notify.lk user ID used by the worker Lambda for SMS delivery."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "notifylk_api_key" {
+  description = "Notify.lk API key used by the worker Lambda for SMS delivery."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "notifylk_sender_id" {
+  description = "Approved Notify.lk sender ID. Use NotifyDEMO only for test traffic."
+  type        = string
+  default     = "NotifyDEMO"
+}
+
+variable "notifylk_sms_type" {
+  description = "Optional Notify.lk SMS type. Set to unicode when Sinhala or Tamil content is required."
+  type        = string
+  default     = ""
+}
+
+variable "demo_sms_recipients" {
+  description = "Optional comma-separated Sri Lankan phone numbers that should always receive outbound SMS during demos."
+  type        = string
+  default     = ""
+}
+
 variable "gemini_api_key" {
   description = "Gemini API key used by the AI orchestration lambda."
   type        = string
