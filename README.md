@@ -1,78 +1,86 @@
 # CrysisConnect — CodeArena 26
 
-A disaster-response platform for citizen photo reports, evidence verification, area warnings, crew dispatch and relief coordination. It targets **Topic 04** of the CodeArena 26 ideathon brief.
+CrysisConnect coordinates disaster response across citizens, council officers, field crews and relief teams. It addresses **Topic 04: Coordinating city response to floods and road hazards** through photo reports, evidence verification, area warnings, shelter allocation and photographic closure.
 
-## Run the local workflow
+## Quick start
 
-Use Node.js 22 or later.
+Use Node.js 22 or later:
 
 ```sh
 npm ci --legacy-peer-deps
 npm run dev
 ```
 
-Open the response portals:
+Open [localhost:3000](http://localhost:3000) or a portal below:
 
-- [Citizen reports](http://localhost:3000/citizen/hazards): submit a photo and GPS location, request help, supply additional evidence and track status.
-- [Government review](http://localhost:3000/admin/hazards): review by urgency, ward and council; request nearby confirmation, moderate false reports and dispatch crews.
-- [NGO field queue](http://localhost:3000/ngo/hazards): inspect assigned cases and close them with a **new** clearance photo and field notes.
-- [Relief coordinator](http://localhost:3000/relief/hazards): allocate assistance and the nearest eligible shelter, inspect screened route guidance and release reservations.
-- [Public map](http://localhost:3000/public-map): view confirmed hazards, warnings and shelters without signing in. Private report details and photos are omitted.
+| Portal | What you can do |
+| --- | --- |
+| [Citizen reports](http://localhost:3000/citizen/hazards) | Report a hazard with photo/GPS, request help, contribute nearby observations and receive area alerts. |
+| [Government review](http://localhost:3000/admin/hazards) | Review by urgency, ward and council; request evidence, moderate reports and dispatch crews. |
+| [NGO field queue](http://localhost:3000/ngo/hazards) | View assigned cases and submit a distinct clearance photo with field notes. |
+| [Relief coordinator](http://localhost:3000/relief/hazards) | Allocate supplies and shelter places, inspect route guidance and release reservations. |
+| [Public map](http://localhost:3000/public-map) | View active hazards, warnings and shelters without signing in. |
 
-Without cloud configuration, development uses clearly labeled demo identities and durable `.data/hazards.json` storage. All portals share the same persisted cases. The citizen selector includes two nearby residents for independent confirmation. Demo shelters, three wards, two councils and roads are synthetic fixtures.
+With Cognito unconfigured, development mode provides labeled demo identities and saves shared state in `.data/hazards.json`. The citizen selector includes two nearby-resident identities for community verification. Demo wards, councils, roads and shelters are synthetic and labeled accordingly.
+
+While the server is running, replay simulated weather and river readings:
 
 ```sh
 npm run weather:replay
 ```
 
-The replay sends simulated normal and flood-level gauge readings to the running backend. Flood thresholds create an area warning and verification case even when no citizen has reported a hazard.
+A threshold breach creates an area warning and verification case independently of citizen reports.
 
-## Evidence workflow
+## Features
+
+- **Photo and GPS reports:** submit hazards and assistance requests, add evidence and follow case status.
+- **Geographic assignment:** map coordinates to configured wards, nearby roads and responsible councils; filter queues and correct council ownership.
+- **Evidence assessment:** run weather and distinct-reporter cluster checks in backend code, plus Gemini image, location and risk checks. A structured aggregator provides reasons, confidence and urgency.
+- **Photo metadata:** extract embedded GPS and capture-time information on the server and compare it with the reported location.
+- **Community confirmation:** invite opted-in nearby residents to submit independent photos and supporting or contradicting observations.
+- **Automatic alert guidance:** attach screened routes to nearby alerts using a resident's shared location.
+- **Response and relief:** assign crews, reserve the nearest eligible shelter with capacity, record supplies and close hazards with photographic evidence.
+- **Administration:** restrict officers and coordinators by council, record human review decisions, and apply or lift reporting bans with an audit trail.
+- **Public updates:** refresh the anonymous hazard map without exposing private report text, photos, resident profiles or moderation records.
+
+## Response workflow
 
 ```mermaid
 flowchart TD
-  Citizen[Citizen photo + GPS] --> Geography[Ward / road mapping + council ticket]
-  Geography --> Case[Persistent case builder]
-  Feed[Weather / river replay] --> Case
+  Citizen[Photo and GPS report] --> Case[Case builder and council assignment]
+  Feed[Mock weather and river feed] --> Case
   Feed --> Warning[Threshold area warning]
-  Case --> Weather[Weather: SYSTEM]
-  Case --> Cluster[Nearby independent reports: SYSTEM]
-  Case --> Image[Image: AI]
-  Case --> Metadata[Server-extracted photo GPS + timestamp]
-  Metadata --> Location[Location plausibility: AI]
-  Case --> Risk[Risk: AI]
-  Weather & Cluster & Image & Location & Risk --> Verdict[AI aggregation + evidence gates]
-  Verdict --> More[Request more evidence]
-  More --> Citizen
-  More --> Neighbors[Invited nearby residents + independent photos]
-  Neighbors --> Case
-  Verdict --> Review[Government verification]
-  Verdict --> Map[Confirmed hazard + alert with route guidance]
-  Review --> Map
-  Map --> Crew[Crew assignment]
-  Crew --> Close[Clearance photo + field notes]
-  Close --> Update[Map removal + citizen update]
-  Review --> Feedback[Recorded outcomes adjust bounded thresholds]
-  Geography --> Priority[Structured urgency + council review queue]
-  Map --> Relief[Relief coordinator + nearest eligible shelter]
+  Case --> System[SYSTEM: weather and cluster checks]
+  Case --> AI[AI: image, location and risk checks]
+  System & AI --> Verdict[AI aggregation and evidence gates]
+  Verdict --> Review[Officer review and urgency queue]
+  Review --> More[Reporter or nearby resident evidence]
+  More --> Case
+  Verdict --> Confirmed[Confirmed hazard]
+  Review --> Confirmed
+  Confirmed --> Map[Public map and area alert]
+  Warning --> Routes[Automatic screened route guidance]
+  Map --> Routes
+  Review --> Crew[Crew assignment]
+  Case --> Relief[Help request and shelter coordination]
+  Crew --> Closure[Clearance photo and field notes]
+  Closure --> Update[Resolve council ticket and update map]
+  Review --> Feedback[Feedback adjusts bounded review thresholds]
 ```
 
-Gemini runs only on the backend. With a configured `GEMINI_API_KEY`, image, location and risk checks feed a structured aggregator with an urgency level. The server compares embedded photo GPS with the claimed location; missing metadata stays explicit, and conflicting GPS or community observations require human review. An unconfigured, uncovered or ambiguous geographic lookup also blocks automatic confirmation until human review. Photo metadata is editable and is not proof of authenticity. Without a key, or if a check fails, the app shows unavailable checks and requires human verification. Confidence is an uncalibrated model estimate.
+Gemini runs on the server. Automatic confirmation requires complete AI checks, sufficient supporting evidence and resolved geography. Missing credentials or conflicting observations require human review before confirmation. Urgency supports prioritization; model confidence is an uncalibrated estimate. Embedded photo metadata is editable consistency evidence, so a GPS match alone does not establish authenticity.
 
-Nearby alerts automatically include screened route guidance for residents sharing a current location. Complete road segments are checked against recorded hazards. Provider failures, intersecting routes, unknown geometry or full shelters yield an explicit unavailable result. If a household starts inside a hazard buffer, relief allocation can reserve a shelter while clearly requiring crew-assisted extraction; it does not invent an evacuation path.
+Routes are screened along complete segments against recorded hazards and disaster boundaries. If an origin is inside a hazard or no usable route can be established, the app shows unavailable guidance. Relief can reserve an eligible shelter while explicitly requiring crew-assisted extraction. Shelter places remain reserved until a coordinator records their release.
 
-Ward polygons assign a responsible council automatically. Operators can filter queues and correct council assignment. Live deployments accept verified geography through `HAZARD_GEOGRAPHY_FILE` or `HAZARD_GEOGRAPHY_JSON`, and restrict council staff through verified Cognito groups. Government reviewers can ban reporting after recording a false-report decision and can lift the ban with an audit reason.
+## Technology and configuration
 
-## Platform capabilities
+The web app uses Next.js, React, TypeScript, Tailwind CSS and MapLibre. The `/api/hazards` workflow runs on a Next.js **Node server**, with local JSON storage for demonstrations or PostgreSQL for live operation. Cloud components include Cognito authentication, AppSync, Lambda, S3, messaging services and Terraform infrastructure.
 
-- AWS Cognito, AppSync subscriptions, Lambda, PostgreSQL/PostGIS, S3 and Terraform infrastructure.
-- Government disaster polygons, geofenced SMS/email, safe zones and operational dashboards.
-- Citizen SOS and resource requests; NGO response and inventory workflows.
-- Flutter Android citizen app. SOS errors remain unconfirmed; routes are screened against current disaster polygons and the shared hazard API.
+The Flutter Android app supports citizen SOS, resources and screened routing. Use the responsive web portals for the complete photo-report, review and closure workflow.
 
-The new `/api/hazards` service runs in the Next.js **Node server**. Live deployments use verified Cognito identities and PostgreSQL state. Existing AppSync operations remain available; new hazard notifications are persisted **in-app broadcasts**, not automatic SMS sends.
+Configure server credentials and providers using [.env.example](.env.example) and the [setup guide](docs/codearena26-setup.md). Live operation requires Cognito, PostgreSQL, a routing provider and verified ward/road/shelter data; Gemini credentials enable AI assessment. Hazard broadcasts are in-app notifications. SMS/email delivery uses the government alert composer and its configured providers.
 
-## Checks
+## Validation
 
 ```sh
 npm run typecheck
@@ -80,10 +88,17 @@ npm test
 npm run build
 npx playwright install chromium
 npm run test:e2e
+```
+
+Inventory live-service configuration without network calls:
+
+```sh
 npm run verify:live
 ```
 
-Android:
+After configuring the services, run `npm run verify:live -- --live` to exercise the actual adapters. Automated tests use controlled providers; deployment validation and live model quality require configured services. See [live validation](docs/live-validation.md) for the checks and their scope.
+
+For Android:
 
 ```sh
 cd citizen_android_app
@@ -92,6 +107,10 @@ flutter analyze
 flutter test
 ```
 
-`verify:live` inventories configuration without network calls. Use `npm run verify:live -- --live` after configuring credentials to exercise the real adapters. Live model quality, cloud operation and verified geographic data still require deployment validation.
+## Documentation
 
-See [configuration and deployment](docs/codearena26-setup.md), [demo walkthrough](docs/demo-script.md), [requirements mapping](docs/codearena26-requirements.md), and [live validation](docs/live-validation.md).
+- [Setup and deployment](docs/codearena26-setup.md)
+- [Demo walkthrough](docs/demo-script.md)
+- [Topic 04 requirements mapping](docs/codearena26-requirements.md)
+- [Live-service validation](docs/live-validation.md)
+- [Android setup](citizen_android_app/README.md)
