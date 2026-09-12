@@ -76,10 +76,10 @@ resource "aws_lambda_function" "ai" {
       GEMINI_INTERACTIVE_MODEL     = "gemini-2.5-flash"
       GEMINI_ANALYSIS_MODEL        = "gemini-2.5-pro"
       AI_RATE_LIMIT_WINDOW_MINUTES = "5"
-      AI_RATE_LIMIT_DEFAULT        = "10"
-      AI_RATE_LIMIT_CITIZEN        = "6"
-      AI_RATE_LIMIT_NGO            = "10"
-      AI_RATE_LIMIT_GOVERNMENT     = "15"
+      AI_RATE_LIMIT_DEFAULT        = "40"
+      AI_RATE_LIMIT_CITIZEN        = "24"
+      AI_RATE_LIMIT_NGO            = "32"
+      AI_RATE_LIMIT_GOVERNMENT     = "80"
     }
   }
 

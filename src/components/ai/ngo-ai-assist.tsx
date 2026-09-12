@@ -9,14 +9,20 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 
-export function NgoSosAiAssist({ sosId }: { sosId: string }) {
+export function NgoSosAiAssist({ sosId }: { sosId?: string | null }) {
   const [triage, setTriage] = useState<SosTriage | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function onAnalyze() {
+    if (!sosId) return;
+
     setLoading(true);
     try {
+      setError(null);
       setTriage(await triageSosCase(sosId));
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Unable to analyze the selected SOS.");
     } finally {
       setLoading(false);
     }
@@ -35,8 +41,13 @@ export function NgoSosAiAssist({ sosId }: { sosId: string }) {
             Converts raw SOS signals into a severity, urgency, and responder recommendation package for operator review.
           </CardDescription>
         </div>
-        <Button onClick={() => void onAnalyze()}>{loading ? "Analyzing..." : "Analyze SOS"}</Button>
+        <Button disabled={!sosId || loading} onClick={() => void onAnalyze()}>
+          {loading ? "Analyzing..." : "Analyze SOS"}
+        </Button>
       </div>
+
+      {!sosId ? <p className="mt-4 text-sm text-muted">No live SOS signal is available to analyze yet.</p> : null}
+      {error ? <p className="mt-4 text-sm text-danger">{error}</p> : null}
 
       {triage ? (
         <div className="mt-6 space-y-3">
@@ -59,14 +70,20 @@ export function NgoSosAiAssist({ sosId }: { sosId: string }) {
   );
 }
 
-export function NgoResourceAiAssist({ requestId }: { requestId: string }) {
+export function NgoResourceAiAssist({ requestId }: { requestId?: string | null }) {
   const [plan, setPlan] = useState<ResourceDispatchPlan | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function onAnalyze() {
+    if (!requestId) return;
+
     setLoading(true);
     try {
+      setError(null);
       setPlan(await recommendResourceDispatch(requestId));
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Unable to analyze the selected request.");
     } finally {
       setLoading(false);
     }
@@ -85,8 +102,13 @@ export function NgoResourceAiAssist({ requestId }: { requestId: string }) {
             Suggests what to dispatch and what still needs human confirmation before field action.
           </CardDescription>
         </div>
-        <Button onClick={() => void onAnalyze()}>{loading ? "Analyzing..." : "Analyze request"}</Button>
+        <Button disabled={!requestId || loading} onClick={() => void onAnalyze()}>
+          {loading ? "Analyzing..." : "Analyze request"}
+        </Button>
       </div>
+
+      {!requestId ? <p className="mt-4 text-sm text-muted">No live pending request is available to analyze yet.</p> : null}
+      {error ? <p className="mt-4 text-sm text-danger">{error}</p> : null}
 
       {plan ? (
         <div className="mt-6 space-y-3">

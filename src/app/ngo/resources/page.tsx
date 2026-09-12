@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input";
 import { useGeolocation } from "@/hooks/use-geolocation";
 import { configureAmplify } from "@/lib/aws/amplify";
 import { mutations, queries, subscriptions } from "@/lib/aws/graphql/operations";
-import { mockResourceRequests, mockResources } from "@/lib/mock-data";
 import type { Resource, ResourceRequest } from "@/lib/types";
 import { cn, toTitleCase } from "@/lib/utils";
 
@@ -81,8 +80,8 @@ function sortRequests(requests: ResourceRequest[]) {
 
 export default function NgoResourcesPage() {
   const hasAwsConfig = Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL);
-  const [resources, setResources] = useState<Resource[]>(() => (hasAwsConfig ? [] : mockResources));
-  const [requests, setRequests] = useState<ResourceRequest[]>(() => (hasAwsConfig ? [] : mockResourceRequests));
+  const [resources, setResources] = useState<Resource[]>([]);
+  const [requests, setRequests] = useState<ResourceRequest[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL));
@@ -188,11 +187,7 @@ export default function NgoResourcesPage() {
 
   async function onFulfill(id: string) {
     if (!hasAwsConfig) {
-      setRequests((current) =>
-        current.map((request) => (request.id === id ? { ...request, status: "fulfilled" } : request))
-      );
-      setMessage("Demo mode: request marked as fulfilled.");
-      setError(null);
+      setError("Live backend is not configured.");
       return;
     }
 
@@ -223,8 +218,7 @@ export default function NgoResourcesPage() {
     event.preventDefault();
 
     if (!hasAwsConfig) {
-      setMessage("Demo mode: resource mutation prepared. Connect AWS to publish live inventory updates.");
-      setError(null);
+      setError("Live backend is not configured.");
       return;
     }
 
@@ -260,7 +254,7 @@ export default function NgoResourcesPage() {
 
   return (
     <div className="space-y-6">
-      <NgoResourceAiAssist requestId={pendingRequests[0]?.id ?? mockResourceRequests[0].id} />
+      <NgoResourceAiAssist requestId={pendingRequests[0]?.id} />
 
       <div className="grid gap-6 xl:grid-cols-[1fr_0.95fr]">
         <Card>

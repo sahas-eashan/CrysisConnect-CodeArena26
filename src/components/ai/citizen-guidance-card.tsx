@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Bot, ShieldAlert } from "lucide-react";
 
+import { useAuth } from "@/hooks/use-auth";
 import { getCitizenGuidance } from "@/lib/ai-client";
 import type { CitizenGuidance } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -10,11 +11,20 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 
 export function CitizenGuidanceCard({ disasterId }: { disasterId?: string | null }) {
+  const hasAwsConfig = Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL);
+  const { isReady, user } = useAuth();
   const [guidance, setGuidance] = useState<CitizenGuidance | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
+    if (hasAwsConfig && isReady && !user) {
+      setGuidance(null);
+      setLoading(false);
+      setError("Sign in with a Cognito account to use live AI guidance.");
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -27,8 +37,12 @@ export function CitizenGuidanceCard({ disasterId }: { disasterId?: string | null
   }
 
   useEffect(() => {
+    if (hasAwsConfig && !isReady) {
+      return;
+    }
+
     void load();
-  }, [disasterId]);
+  }, [disasterId, hasAwsConfig, isReady, user]);
 
   return (
     <Card className="border-primary/30 bg-primary/5">
@@ -43,7 +57,7 @@ export function CitizenGuidanceCard({ disasterId }: { disasterId?: string | null
             Role-aware multilingual recommendations grounded in current CrisisConnect disaster, shelter, and resource data.
           </CardDescription>
         </div>
-        <Button onClick={() => void load()} variant="outline">
+        <Button disabled={hasAwsConfig && isReady && !user} onClick={() => void load()} variant="outline">
           Refresh
         </Button>
       </div>
@@ -77,6 +91,7 @@ export function CitizenGuidanceCard({ disasterId }: { disasterId?: string | null
           </div>
 
           <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
+            <Badge>{guidance.meta.status === "completed" ? "Gemini live" : guidance.meta.status}</Badge>
             <Badge>{Math.round(guidance.meta.confidence * 100)}% confidence</Badge>
             <Badge>Sources: {guidance.meta.sourceIds.join(", ") || "live context"}</Badge>
             {guidance.meta.warnings.length ? (

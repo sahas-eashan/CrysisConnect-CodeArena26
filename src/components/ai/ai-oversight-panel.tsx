@@ -7,7 +7,7 @@ import { getAiAuditLogs } from "@/lib/ai-client";
 import type { AiAuditRef } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { Card, CardTitle } from "@/components/ui/card";
 
 export function AiOversightPanel() {
   const [logs, setLogs] = useState<AiAuditRef[]>([]);
@@ -39,9 +39,6 @@ export function AiOversightPanel() {
             <Activity className="h-5 w-5 text-primary" />
             Audit and review trail
           </CardTitle>
-          <CardDescription className="mt-2">
-            Shows generated AI actions, audit IDs, review status, and model usage so judges can see governance rather than just generation.
-          </CardDescription>
         </div>
         <Button onClick={() => void load()} variant="outline">
           Refresh
@@ -58,6 +55,7 @@ export function AiOversightPanel() {
               <div>
                 <p className="font-medium text-white">{log.action}</p>
                 <p className="mt-1 text-xs text-muted">Audit ID: {log.id}</p>
+                <p className="mt-1 text-xs text-muted">{new Date(log.createdAt).toLocaleString()}</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Badge>{log.model}</Badge>

@@ -35,6 +35,10 @@ type AuditInsert = {
   tokenUsage: number | null;
 };
 
+type GeminiHttpError = Error & {
+  statusCode?: number;
+};
+
 const pool = new Pool({
   host: process.env.DB_HOST,
   port: Number(process.env.DB_PORT ?? 5432),
@@ -70,6 +74,36 @@ function getRole(event: AppSyncEvent) {
   return "citizen";
 }
 
+function getProfileRole(event: AppSyncEvent) {
+  const groups = getGroups(event);
+  if (groups.includes("government")) return "government";
+  if (groups.includes("ngo")) return "ngo_org_member";
+  if (groups.includes("ngo_org_member")) return "ngo_org_member";
+  if (groups.includes("ngo_individual")) return "ngo_individual";
+
+  const roleClaim = event.identity?.claims?.["custom:role"];
+  if (
+    roleClaim === "government" ||
+    roleClaim === "ngo" ||
+    roleClaim === "ngo_org_member" ||
+    roleClaim === "ngo_individual" ||
+    roleClaim === "citizen"
+  ) {
+    return roleClaim === "ngo" ? "ngo_org_member" : roleClaim;
+  }
+
+  return "citizen";
+}
+
+function getProfileName(event: AppSyncEvent, userId: string) {
+  const claims = event.identity?.claims ?? {};
+  const candidates = [claims.name, claims.email, claims.phone_number]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .map((value) => value.trim());
+
+  return candidates[0] ?? `Citizen ${userId.slice(0, 8)}`;
+}
+
 function requireRole(event: AppSyncEvent, allowed: string[]) {
   const role = getRole(event);
   if (!allowed.includes(role)) {
@@ -80,6 +114,28 @@ function requireRole(event: AppSyncEvent, allowed: string[]) {
 
 function requireUserId(event: AppSyncEvent) {
   return event.identity?.sub ?? null;
+}
+
+async function ensureProfile(event: AppSyncEvent, userId: string) {
+  await pool.query(
+    `INSERT INTO profiles (id, role, full_name, phone, email, is_available)
+     VALUES ($1, $2::user_role, $3, $4, $5, true)
+     ON CONFLICT (id) DO UPDATE
+     SET role = CASE
+           WHEN profiles.role = 'citizen'::user_role AND EXCLUDED.role <> 'citizen'::user_role THEN EXCLUDED.role
+           ELSE profiles.role
+         END,
+         full_name = COALESCE(NULLIF(profiles.full_name, ''), EXCLUDED.full_name),
+         phone = COALESCE(profiles.phone, EXCLUDED.phone),
+         email = COALESCE(profiles.email, EXCLUDED.email)`,
+    [
+      userId,
+      getProfileRole(event),
+      getProfileName(event, userId),
+      typeof event.identity?.claims?.phone_number === "string" ? event.identity.claims.phone_number : null,
+      typeof event.identity?.claims?.email === "string" ? event.identity.claims.email : null
+    ]
+  );
 }
 
 function looksLikePromptInjection(value: string) {
@@ -398,12 +454,76 @@ function createSchemaInstruction(schema: Record<string, unknown>) {
   return JSON.stringify(schema);
 }
 
+function mapSchemaPrimitive(value: string) {
+  if (value === "string|null") {
+    return {
+      type: "string",
+      nullable: true
+    };
+  }
+
+  if (["string", "number", "integer", "boolean", "null"].includes(value)) {
+    return { type: value };
+  }
+
+  return { type: "string" };
+}
+
+function toGeminiSchema(schema: unknown): Record<string, unknown> {
+  if (Array.isArray(schema)) {
+    return {
+      type: "array",
+      items: toGeminiSchema(schema[0] ?? "string")
+    };
+  }
+
+  if (typeof schema === "string") {
+    return mapSchemaPrimitive(schema);
+  }
+
+  if (schema && typeof schema === "object") {
+    const entries = Object.entries(schema);
+    return {
+      type: "object",
+      properties: Object.fromEntries(entries.map(([key, value]) => [key, toGeminiSchema(value)])),
+      required: entries.map(([key]) => key)
+    };
+  }
+
+  return { type: "string" };
+}
+
+function extractJsonText(text: string) {
+  const trimmed = text.trim();
+
+  if (trimmed.startsWith("```")) {
+    const withoutFence = trimmed.replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
+    if (withoutFence) return withoutFence;
+  }
+
+  const firstObject = trimmed.indexOf("{");
+  const lastObject = trimmed.lastIndexOf("}");
+  if (firstObject >= 0 && lastObject > firstObject) {
+    return trimmed.slice(firstObject, lastObject + 1);
+  }
+
+  const firstArray = trimmed.indexOf("[");
+  const lastArray = trimmed.lastIndexOf("]");
+  if (firstArray >= 0 && lastArray > firstArray) {
+    return trimmed.slice(firstArray, lastArray + 1);
+  }
+
+  return trimmed;
+}
+
 async function callGemini<T>({
+  taskName,
   model,
   systemInstruction,
   prompt,
   schema
 }: {
+  taskName: string;
   model: string;
   systemInstruction: string;
   prompt: string;
@@ -435,7 +555,8 @@ async function callGemini<T>({
         generationConfig: {
           temperature: 0.2,
           topP: 0.8,
-          responseMimeType: "application/json"
+          responseMimeType: "application/json",
+          responseSchema: toGeminiSchema(schema)
         },
         safetySettings: [
           { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
@@ -448,14 +569,82 @@ async function callGemini<T>({
   );
 
   if (!response.ok) {
-    throw new Error(`Gemini request failed with ${response.status}`);
+    const details = await response.text();
+    console.error(
+      JSON.stringify({
+        level: "error",
+        taskName,
+        model,
+        event: "gemini_http_error",
+        statusCode: response.status,
+        details: details.slice(0, 600)
+      })
+    );
+    const error = new Error(`Gemini request failed with ${response.status}`) as GeminiHttpError;
+    error.statusCode = response.status;
+    throw error;
   }
 
   const payload = (await response.json()) as any;
+  const finishReason = payload.candidates?.[0]?.finishReason ?? null;
   const text = payload.candidates?.[0]?.content?.parts?.map((part: any) => part.text ?? "").join("")?.trim();
-  if (!text) return null;
+  if (!text) {
+    console.warn(
+      JSON.stringify({
+        level: "warn",
+        taskName,
+        model,
+        event: "gemini_empty_response",
+        finishReason,
+        promptFeedback: payload.promptFeedback ?? null
+      })
+    );
+    return null;
+  }
 
-  return JSON.parse(text) as T;
+  try {
+    const normalizedText = extractJsonText(text);
+    const parsed = JSON.parse(normalizedText) as T;
+    console.log(
+      JSON.stringify({
+        level: "info",
+        taskName,
+        model,
+        event: "gemini_completed",
+        finishReason
+      })
+    );
+    return parsed;
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        level: "error",
+        taskName,
+        model,
+        event: "gemini_parse_error",
+        finishReason,
+        rawText: text.slice(0, 600),
+        message: error instanceof Error ? error.message : "Unknown parse error"
+      })
+    );
+    throw error;
+  }
+}
+
+function isGeminiQuotaError(error: unknown) {
+  return typeof (error as GeminiHttpError | undefined)?.statusCode === "number" && (error as GeminiHttpError).statusCode === 429;
+}
+
+function toAiErrorMessage(action: string, error: unknown) {
+  if (isGeminiQuotaError(error)) {
+    return `Live AI is temporarily unavailable for ${action} because the current Gemini quota has been exceeded.`;
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  return `Live AI failed while running ${action}.`;
 }
 
 function ensureStringArray(value: unknown) {
@@ -530,18 +719,14 @@ async function generateCitizenGuidance(event: AppSyncEvent) {
      LIMIT 2`
   );
 
-  const fallback = nearestSafeZoneGuidance(currentDisaster, safeZone, resources);
   const warnings = ["AI guidance is advisory. Follow official emergency instructions when they differ."];
   const riskFlags = buildRiskFlags(null);
   const sourceIdList = sourceIds(currentDisaster?.id, safeZone?.id, ...resources.map((resource) => resource.id));
-
-  let payload = fallback;
-  let status = "fallback";
-  let confidence = 0.79;
   const tokenUsage: number | null = null;
 
   try {
-    const generated = await callGemini<typeof fallback>({
+    const generated = await callGemini<ReturnType<typeof nearestSafeZoneGuidance>>({
+      taskName: "getCitizenGuidance",
       model: INTERACTIVE_MODEL,
       systemInstruction:
         "You are a safety-focused disaster assistant. Use only the structured CrisisConnect context provided. Do not invent shelters, resources, or capabilities. Keep language clear, calm, and concise.",
@@ -567,47 +752,47 @@ async function generateCitizenGuidance(event: AppSyncEvent) {
       }
     });
 
-    if (generated && typeof generated.title === "string") {
-      payload = {
-        title: generated.title,
-        safeZoneId: typeof generated.safeZoneId === "string" ? generated.safeZoneId : fallback.safeZoneId,
-        resourceIds: ensureStringArray((generated as any).resourceIds),
-        nextSteps: ensureStringArray((generated as any).nextSteps),
-        guidance: validateTranslations((generated as any).guidance)
-      };
-      status = "completed";
-      confidence = 0.86;
+    if (!generated || typeof generated.title !== "string") {
+      throw new Error("Live AI returned an invalid citizen guidance payload.");
     }
-  } catch {
-    warnings.push("Gemini was unavailable, so CrisisConnect used a deterministic safety fallback.");
-  }
 
-  const audit = await insertAuditLog({
-    action: "getCitizenGuidance",
-    role,
-    userId,
-    model: INTERACTIVE_MODEL,
-    status,
-    reviewStatus: "not_required",
-    confidence,
-    sourceIds: sourceIdList,
-    warnings,
-    riskFlags,
-    latencyMs: Date.now() - startedAt,
-    tokenUsage
-  });
+    const payload = {
+      title: generated.title,
+      safeZoneId: typeof generated.safeZoneId === "string" ? generated.safeZoneId : safeZone?.id ?? null,
+      resourceIds: ensureStringArray((generated as any).resourceIds),
+      nextSteps: ensureStringArray((generated as any).nextSteps),
+      guidance: validateTranslations((generated as any).guidance)
+    };
 
-  return {
-    ...payload,
-    meta: aiMeta(audit, {
-      status,
-      confidence,
+    const audit = await insertAuditLog({
+      action: "getCitizenGuidance",
+      role,
+      userId,
+      model: INTERACTIVE_MODEL,
+      status: "completed",
+      reviewStatus: "not_required",
+      confidence: 0.86,
       sourceIds: sourceIdList,
       warnings,
-      requiresHumanApproval: false,
-      riskFlags
-    })
-  };
+      riskFlags,
+      latencyMs: Date.now() - startedAt,
+      tokenUsage
+    });
+
+    return {
+      ...payload,
+      meta: aiMeta(audit, {
+        status: "completed",
+        confidence: 0.86,
+        sourceIds: sourceIdList,
+        warnings,
+        requiresHumanApproval: false,
+        riskFlags
+      })
+    };
+  } catch (error) {
+    throw new Error(toAiErrorMessage("citizen guidance", error));
+  }
 }
 
 async function generatePreparedSos(event: AppSyncEvent) {
@@ -623,12 +808,13 @@ async function generatePreparedSos(event: AppSyncEvent) {
   const warnings = ["Review the AI-prepared SOS before sending it to responders."];
 
   let payload = fallbackPreparedSos(input);
-  let status = riskFlags.blocked ? "blocked" : "fallback";
-  let confidence = riskFlags.blocked ? 0.15 : 0.76;
+  let status = riskFlags.blocked ? "blocked" : "completed";
+  let confidence = riskFlags.blocked ? 0.15 : 0.83;
 
   if (!riskFlags.blocked) {
     try {
       const generated = await callGemini<typeof payload>({
+        taskName: "prepareSosSubmission",
         model: INTERACTIVE_MODEL,
         systemInstruction:
           "You are preparing an SOS summary for emergency responders. Preserve facts, remove hype, do not invent injuries or hazards, and keep the summary concise and operational.",
@@ -661,11 +847,11 @@ async function generatePreparedSos(event: AppSyncEvent) {
           checklist: ensureStringArray((generated as any).checklist),
           translations: validateTranslations((generated as any).translations)
         };
-        status = "completed";
-        confidence = 0.83;
+      } else {
+        throw new Error("Live AI returned an invalid SOS preparation payload.");
       }
-    } catch {
-      warnings.push("Gemini was unavailable, so a deterministic SOS refinement was used.");
+    } catch (error) {
+      throw new Error(toAiErrorMessage("SOS preparation", error));
     }
   } else {
     warnings.push("Potential prompt injection content was detected. CrisisConnect blocked model rewriting and used a safe fallback summary.");
@@ -740,7 +926,6 @@ async function generateIncidentBrief(event: AppSyncEvent) {
     [disaster?.id ?? null]
   );
 
-  const fallback = fallbackIncidentBrief({ disaster, safeZones, resources, sosSignals });
   const sourceIdList = sourceIds(
     disaster?.id,
     ...safeZones.map((zone) => zone.id),
@@ -749,12 +934,11 @@ async function generateIncidentBrief(event: AppSyncEvent) {
   );
   const warnings = ["AI-generated command briefs require duty-officer review before operational action."];
   const riskFlags = buildRiskFlags(null);
-  let payload = fallback;
-  let status = "fallback";
-  let confidence = 0.82;
+  let modelUsed = ANALYSIS_MODEL;
 
   try {
-    const generated = await callGemini<typeof fallback>({
+    const request = {
+      taskName: "generateIncidentBrief",
       model: ANALYSIS_MODEL,
       systemInstruction:
         "You are a government disaster command copilot. Use only the structured CrisisConnect data provided. Do not speculate, do not issue public promises, and keep recommendations operational and reviewable.",
@@ -787,49 +971,65 @@ async function generateIncidentBrief(event: AppSyncEvent) {
           tamil: "string"
         }
       }
-    });
+    } as const;
+
+    let generated: ReturnType<typeof fallbackIncidentBrief> | null = null;
+
+    try {
+      generated = await callGemini<ReturnType<typeof fallbackIncidentBrief>>(request);
+    } catch (error) {
+      if (!isGeminiQuotaError(error) || ANALYSIS_MODEL === INTERACTIVE_MODEL) {
+        throw error;
+      }
+
+      modelUsed = INTERACTIVE_MODEL;
+      warnings.push(`Primary analysis model quota was unavailable, so CrisisConnect retried with ${INTERACTIVE_MODEL}.`);
+      generated = await callGemini<ReturnType<typeof fallbackIncidentBrief>>({
+        ...request,
+        model: INTERACTIVE_MODEL
+      });
+    }
 
     if (generated && typeof generated.headline === "string") {
-      payload = {
+      const payload = {
         headline: generated.headline,
-        summary: typeof generated.summary === "string" ? generated.summary : fallback.summary,
+        summary: typeof generated.summary === "string" ? generated.summary : "",
         rationale: validateRationale((generated as any).rationale),
         recommendations: validateRecommendationList((generated as any).recommendations),
         translations: validateTranslations((generated as any).translations)
       };
-      status = "completed";
-      confidence = 0.89;
+
+      const audit = await insertAuditLog({
+        action: "generateIncidentBrief",
+        role,
+        userId,
+        model: modelUsed,
+        status: "completed",
+        reviewStatus: "pending_review",
+        confidence: 0.89,
+        sourceIds: sourceIdList,
+        warnings,
+        riskFlags,
+        latencyMs: Date.now() - startedAt,
+        tokenUsage: null
+      });
+
+      return {
+        ...payload,
+        meta: aiMeta(audit, {
+          status: "completed",
+          confidence: 0.89,
+          sourceIds: sourceIdList,
+          warnings,
+          requiresHumanApproval: true,
+          riskFlags
+        })
+      };
     }
-  } catch {
-    warnings.push("Gemini was unavailable, so CrisisConnect generated a deterministic incident brief fallback.");
+    throw new Error("Live AI returned an invalid incident brief payload.");
+  } catch (error) {
+    throw new Error(toAiErrorMessage("incident brief generation", error));
   }
-
-  const audit = await insertAuditLog({
-    action: "generateIncidentBrief",
-    role,
-    userId,
-    model: ANALYSIS_MODEL,
-    status,
-    reviewStatus: "pending_review",
-    confidence,
-    sourceIds: sourceIdList,
-    warnings,
-    riskFlags,
-    latencyMs: Date.now() - startedAt,
-    tokenUsage: null
-  });
-
-  return {
-    ...payload,
-    meta: aiMeta(audit, {
-      status,
-      confidence,
-      sourceIds: sourceIdList,
-      warnings,
-      requiresHumanApproval: true,
-      riskFlags
-    })
-  };
 }
 
 async function generateAlertDraft(event: AppSyncEvent) {
@@ -845,12 +1045,13 @@ async function generateAlertDraft(event: AppSyncEvent) {
   const warnings = ["Human approval is mandatory before any AI-generated alert is broadcast."];
 
   let payload = fallbackAlertDraft(input, disaster);
-  let status = riskFlags.blocked ? "blocked" : "fallback";
-  let confidence = riskFlags.blocked ? 0.18 : 0.81;
+  let status = riskFlags.blocked ? "blocked" : "completed";
+  let confidence = riskFlags.blocked ? 0.18 : 0.86;
 
   if (!riskFlags.blocked) {
     try {
       const generated = await callGemini<typeof payload>({
+        taskName: "generateAlertDraft",
         model: INTERACTIVE_MODEL,
         systemInstruction:
           "You are drafting a multilingual government safety alert. Keep instructions concrete, calm, and suitable for review. Do not add unsupported claims or evacuation promises.",
@@ -886,11 +1087,11 @@ async function generateAlertDraft(event: AppSyncEvent) {
           sinhala: typeof generated.sinhala === "string" ? generated.sinhala : payload.sinhala,
           tamil: typeof generated.tamil === "string" ? generated.tamil : payload.tamil
         };
-        status = "completed";
-        confidence = 0.86;
+      } else {
+        throw new Error("Live AI returned an invalid alert draft payload.");
       }
-    } catch {
-      warnings.push("Gemini was unavailable, so CrisisConnect generated a deterministic multilingual alert draft fallback.");
+    } catch (error) {
+      throw new Error(toAiErrorMessage("alert drafting", error));
     }
   } else {
     warnings.push("Potential prompt injection content was detected in the alert draft input. The model response was blocked.");
@@ -940,15 +1141,12 @@ async function recommendOperations(event: AppSyncEvent) {
      ORDER BY created_at DESC
      LIMIT 10`
   );
-  const fallback = fallbackOperations({ sosSignals, resources, safeZones }, timeframe);
   const warnings = ["Operational recommendations are advisory and require command review."];
   const riskFlags = buildRiskFlags(null);
-  let payload = fallback;
-  let status = "fallback";
-  let confidence = 0.8;
 
   try {
-    const generated = await callGemini<typeof fallback>({
+    const generated = await callGemini<ReturnType<typeof fallbackOperations>>({
+      taskName: "recommendOperations",
       model: INTERACTIVE_MODEL,
       systemInstruction:
         "You are ranking disaster command actions for the next shift. Use only the structured data provided, avoid unsupported certainty, and prefer operationally practical steps.",
@@ -978,44 +1176,44 @@ async function recommendOperations(event: AppSyncEvent) {
     });
 
     if (generated) {
-      payload = {
+      const payload = {
         timeframe: typeof (generated as any).timeframe === "string" ? (generated as any).timeframe : timeframe,
         rationale: validateRationale((generated as any).rationale),
         recommendations: validateRecommendationList((generated as any).recommendations)
       };
-      status = "completed";
-      confidence = 0.85;
+
+      const sources = sourceIds(...safeZones.map((zone) => zone.id), ...resources.map((resource) => resource.id), ...sosSignals.map((signal) => signal.id));
+      const audit = await insertAuditLog({
+        action: "recommendOperations",
+        role,
+        userId,
+        model: INTERACTIVE_MODEL,
+        status: "completed",
+        reviewStatus: "pending_review",
+        confidence: 0.85,
+        sourceIds: sources,
+        warnings,
+        riskFlags,
+        latencyMs: Date.now() - startedAt,
+        tokenUsage: null
+      });
+
+      return {
+        ...payload,
+        meta: aiMeta(audit, {
+          status: "completed",
+          confidence: 0.85,
+          sourceIds: sources,
+          warnings,
+          requiresHumanApproval: true,
+          riskFlags
+        })
+      };
     }
-  } catch {
-    warnings.push("Gemini was unavailable, so CrisisConnect used deterministic operations recommendations.");
+    throw new Error("Live AI returned an invalid operations recommendation payload.");
+  } catch (error) {
+    throw new Error(toAiErrorMessage("operations recommendation", error));
   }
-
-  const audit = await insertAuditLog({
-    action: "recommendOperations",
-    role,
-    userId,
-    model: INTERACTIVE_MODEL,
-    status,
-    reviewStatus: "pending_review",
-    confidence,
-    sourceIds: sourceIds(...safeZones.map((zone) => zone.id), ...resources.map((resource) => resource.id), ...sosSignals.map((signal) => signal.id)),
-    warnings,
-    riskFlags,
-    latencyMs: Date.now() - startedAt,
-    tokenUsage: null
-  });
-
-  return {
-    ...payload,
-    meta: aiMeta(audit, {
-      status,
-      confidence,
-      sourceIds: sourceIds(...safeZones.map((zone) => zone.id), ...resources.map((resource) => resource.id), ...sosSignals.map((signal) => signal.id)),
-      warnings,
-      requiresHumanApproval: true,
-      riskFlags
-    })
-  };
 }
 
 async function triageSosCase(event: AppSyncEvent) {
@@ -1049,12 +1247,13 @@ async function triageSosCase(event: AppSyncEvent) {
   const riskFlags = buildRiskFlags(String(sos?.description ?? ""));
   const warnings = ["Responder assignment remains a human approval action."];
   let payload = fallbackSosTriage(sos, responders);
-  let status = riskFlags.blocked ? "blocked" : "fallback";
-  let confidence = riskFlags.blocked ? 0.2 : 0.79;
+  let status = riskFlags.blocked ? "blocked" : "completed";
+  let confidence = riskFlags.blocked ? 0.2 : 0.84;
 
   if (!riskFlags.blocked) {
     try {
       const generated = await callGemini<typeof payload>({
+        taskName: "triageSosCase",
         model: INTERACTIVE_MODEL,
         systemInstruction:
           "You are triaging an SOS for NGO responders. Keep severity defensible, avoid medical diagnosis, and recommend only reviewable actions.",
@@ -1093,11 +1292,11 @@ async function triageSosCase(event: AppSyncEvent) {
           rationale: validateRationale((generated as any).rationale),
           recommendations: validateRecommendationList((generated as any).recommendations)
         };
-        status = "completed";
-        confidence = 0.84;
+      } else {
+        throw new Error("Live AI returned an invalid SOS triage payload.");
       }
-    } catch {
-      warnings.push("Gemini was unavailable, so CrisisConnect used deterministic SOS triage guidance.");
+    } catch (error) {
+      throw new Error(toAiErrorMessage("SOS triage", error));
     }
   } else {
     warnings.push("Potential prompt injection content was detected in the SOS narrative. The model output was blocked.");
@@ -1149,12 +1348,13 @@ async function recommendResourceDispatch(event: AppSyncEvent) {
   const warnings = ["Dispatch suggestions require human confirmation and inventory validation."];
   const riskFlags = buildRiskFlags(String(request?.resource_name ?? ""));
   let payload = fallbackResourceDispatch(request, resources);
-  let status = riskFlags.blocked ? "blocked" : "fallback";
-  let confidence = riskFlags.blocked ? 0.2 : 0.77;
+  let status = riskFlags.blocked ? "blocked" : "completed";
+  let confidence = riskFlags.blocked ? 0.2 : 0.82;
 
   if (!riskFlags.blocked) {
     try {
       const generated = await callGemini<typeof payload>({
+        taskName: "recommendResourceDispatch",
         model: INTERACTIVE_MODEL,
         systemInstruction:
           "You are recommending a resource dispatch plan for NGO field teams. Use only the structured context, avoid claiming stock certainty, and keep the plan easy to review.",
@@ -1187,11 +1387,11 @@ async function recommendResourceDispatch(event: AppSyncEvent) {
           rationale: validateRationale((generated as any).rationale),
           recommendations: validateRecommendationList((generated as any).recommendations)
         };
-        status = "completed";
-        confidence = 0.82;
+      } else {
+        throw new Error("Live AI returned an invalid resource dispatch payload.");
       }
-    } catch {
-      warnings.push("Gemini was unavailable, so CrisisConnect used deterministic resource dispatch guidance.");
+    } catch (error) {
+      throw new Error(toAiErrorMessage("resource dispatch planning", error));
     }
   }
 
@@ -1236,6 +1436,11 @@ async function getAiAuditLogs(event: AppSyncEvent) {
 }
 
 export async function handler(event: AppSyncEvent) {
+  const userId = requireUserId(event);
+  if (userId) {
+    await ensureProfile(event, userId);
+  }
+
   switch (event.info.fieldName) {
     case "getCitizenGuidance":
       return generateCitizenGuidance(event);

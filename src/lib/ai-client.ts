@@ -4,16 +4,6 @@ import { generateClient } from "aws-amplify/api";
 
 import { configureAmplify } from "@/lib/aws/amplify";
 import { mutations, queries } from "@/lib/aws/graphql/operations";
-import {
-  mockAiAuditLogs,
-  mockAlertDraft,
-  mockCitizenGuidance,
-  mockIncidentBrief,
-  mockOperationsRecommendationSet,
-  mockPreparedSosSubmission,
-  mockResourceDispatchPlan,
-  mockSosTriage
-} from "@/lib/mock-data";
 import type {
   AiAuditRef,
   AlertDraft,
@@ -26,53 +16,141 @@ import type {
 } from "@/lib/types";
 
 const hasAwsConfig = () => Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL);
+const inflightRequests = new Map<string, Promise<any>>();
+const recentResponses = new Map<string, { expiresAt: number; value: any }>();
+const DEFAULT_CACHE_MS = 15_000;
 
-async function runGraphql<T>(request: { query: string; variables?: Record<string, unknown> }, fallback: T): Promise<T> {
-  if (!hasAwsConfig()) return fallback;
+function requireAwsConfig() {
+  if (!hasAwsConfig()) {
+    throw new Error("Live AI backend is not configured.");
+  }
+}
+
+function readGraphqlError(result: any) {
+  const message =
+    result?.errors?.[0]?.message ??
+    result?.errors?.[0]?.errorInfo?.message ??
+    result?.errors?.[0]?.originalError?.message;
+
+  return typeof message === "string" && message.trim() ? message : null;
+}
+
+function normalizeGraphqlError(error: unknown) {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  const message =
+    (error as any)?.errors?.[0]?.message ??
+    (error as any)?.errors?.[0]?.errorInfo?.message ??
+    (error as any)?.data?.errors?.[0]?.message ??
+    (error as any)?.message;
+
+  if (typeof message === "string" && message.trim()) {
+    return message;
+  }
+
+  return "Unable to reach the live AI backend.";
+}
+
+function requirePayload<T>(value: T | null | undefined, name: string) {
+  if (value == null) {
+    throw new Error(`Live AI backend returned no ${name}.`);
+  }
+
+  return value;
+}
+
+async function runGraphql(request: { query: string; variables?: Record<string, unknown> }) {
+  requireAwsConfig();
 
   configureAmplify();
   const client = generateClient();
-  const result = await client.graphql(request);
-  return result as unknown as T;
+  try {
+    const result = await client.graphql({
+      ...request,
+      authMode: "userPool"
+    });
+    const errorMessage = readGraphqlError(result);
+
+    if (errorMessage) {
+      throw new Error(errorMessage);
+    }
+
+    return result as any;
+  } catch (error) {
+    const message = normalizeGraphqlError(error);
+    if (message.toLowerCase().includes("unauthorized")) {
+      throw new Error("Sign in with a Cognito account to use live AI guidance.");
+    }
+    throw new Error(message);
+  }
+}
+
+async function runCached<T>(key: string, factory: () => Promise<T>, ttlMs = DEFAULT_CACHE_MS) {
+  const cached = recentResponses.get(key);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.value as T;
+  }
+
+  const inflight = inflightRequests.get(key);
+  if (inflight) {
+    return (await inflight) as T;
+  }
+
+  const nextPromise = factory()
+    .then((value) => {
+      recentResponses.set(key, {
+        value,
+        expiresAt: Date.now() + ttlMs
+      });
+      inflightRequests.delete(key);
+      return value;
+    })
+    .catch((error) => {
+      inflightRequests.delete(key);
+      throw error;
+    });
+
+  inflightRequests.set(key, nextPromise);
+  return (await nextPromise) as T;
 }
 
 export async function getCitizenGuidance(disasterId?: string | null) {
-  if (!hasAwsConfig()) return mockCitizenGuidance;
-  const result = (await runGraphql<any>(
-    {
+  return runCached(`getCitizenGuidance:${disasterId ?? "active"}`, async () => {
+    const result = await runGraphql({
       query: queries.getCitizenGuidance,
       variables: { disasterId: disasterId ?? null }
-    },
-    null
-  )) as any;
+    });
 
-  return ((result?.data?.getCitizenGuidance ?? mockCitizenGuidance) as CitizenGuidance);
+    return requirePayload(result?.data?.getCitizenGuidance as CitizenGuidance | null | undefined, "citizen guidance");
+  });
 }
 
 export async function getAiAuditLogs(limit = 20) {
-  if (!hasAwsConfig()) return mockAiAuditLogs;
-  const result = (await runGraphql<any>(
-    {
-      query: queries.getAiAuditLogs,
-      variables: { limit }
-    },
-    null
-  )) as any;
+  return runCached(
+    `getAiAuditLogs:${limit}`,
+    async () => {
+      const result = await runGraphql({
+        query: queries.getAiAuditLogs,
+        variables: { limit }
+      });
 
-  return ((result?.data?.getAiAuditLogs ?? mockAiAuditLogs) as AiAuditRef[]);
+      return (result?.data?.getAiAuditLogs ?? []) as AiAuditRef[];
+    },
+    5_000
+  );
 }
 
 export async function generateIncidentBrief(disasterId?: string | null) {
-  if (!hasAwsConfig()) return mockIncidentBrief;
-  const result = (await runGraphql<any>(
-    {
+  return runCached(`generateIncidentBrief:${disasterId ?? "active"}`, async () => {
+    const result = await runGraphql({
       query: mutations.generateIncidentBrief,
       variables: { disasterId: disasterId ?? null }
-    },
-    null
-  )) as any;
+    });
 
-  return ((result?.data?.generateIncidentBrief ?? mockIncidentBrief) as IncidentBrief);
+    return requirePayload(result?.data?.generateIncidentBrief as IncidentBrief | null | undefined, "incident brief");
+  });
 }
 
 export async function generateAlertDraft(input: {
@@ -82,88 +160,75 @@ export async function generateAlertDraft(input: {
   targetRoles?: string[];
   disasterId?: string | null;
 }) {
-  if (!hasAwsConfig()) {
-    return {
-      ...mockAlertDraft,
-      title: input.title || mockAlertDraft.title,
-      channel: input.channel.length ? input.channel : mockAlertDraft.channel
-    };
-  }
+  const normalizedInput = {
+    ...input,
+    targetRoles: input.targetRoles ?? [],
+    disasterId: input.disasterId ?? null
+  };
 
-  const result = (await runGraphql<any>(
-    {
+  return runCached(`generateAlertDraft:${JSON.stringify(normalizedInput)}`, async () => {
+    const result = await runGraphql({
       query: mutations.generateAlertDraft,
       variables: {
-        input: {
-          ...input,
-          targetRoles: input.targetRoles ?? [],
-          disasterId: input.disasterId ?? null
-        }
+        input: normalizedInput
       }
-    },
-    null
-  )) as any;
+    });
 
-  return ((result?.data?.generateAlertDraft ?? mockAlertDraft) as AlertDraft);
+    return requirePayload(result?.data?.generateAlertDraft as AlertDraft | null | undefined, "alert draft");
+  });
 }
 
 export async function recommendOperations(timeframe = "next_6_hours") {
-  if (!hasAwsConfig()) return mockOperationsRecommendationSet;
-  const result = (await runGraphql<any>(
-    {
+  return runCached(`recommendOperations:${timeframe}`, async () => {
+    const result = await runGraphql({
       query: mutations.recommendOperations,
       variables: { timeframe }
-    },
-    null
-  )) as any;
+    });
 
-  return ((result?.data?.recommendOperations ?? mockOperationsRecommendationSet) as OperationsRecommendationSet);
+    return requirePayload(
+      result?.data?.recommendOperations as OperationsRecommendationSet | null | undefined,
+      "operations recommendation set"
+    );
+  });
 }
 
 export async function triageSosCase(id: string) {
-  if (!hasAwsConfig()) return mockSosTriage;
-  const result = (await runGraphql<any>(
-    {
+  return runCached(`triageSosCase:${id}`, async () => {
+    const result = await runGraphql({
       query: mutations.triageSosCase,
       variables: { id }
-    },
-    null
-  )) as any;
+    });
 
-  return ((result?.data?.triageSosCase ?? mockSosTriage) as SosTriage);
+    return requirePayload(result?.data?.triageSosCase as SosTriage | null | undefined, "SOS triage analysis");
+  });
 }
 
 export async function recommendResourceDispatch(id: string) {
-  if (!hasAwsConfig()) return mockResourceDispatchPlan;
-  const result = (await runGraphql<any>(
-    {
+  return runCached(`recommendResourceDispatch:${id}`, async () => {
+    const result = await runGraphql({
       query: mutations.recommendResourceDispatch,
       variables: { id }
-    },
-    null
-  )) as any;
+    });
 
-  return ((result?.data?.recommendResourceDispatch ?? mockResourceDispatchPlan) as ResourceDispatchPlan);
+    return requirePayload(
+      result?.data?.recommendResourceDispatch as ResourceDispatchPlan | null | undefined,
+      "resource dispatch plan"
+    );
+  });
 }
 
 export async function prepareSosSubmission(input: { type: string; description: string }) {
-  if (!hasAwsConfig()) {
-    return {
-      ...mockPreparedSosSubmission,
-      original: input.description,
-      refined: `${input.type.toUpperCase()} emergency: ${input.description.trim()}`
-    };
-  }
-
-  const result = (await runGraphql<any>(
-    {
+  return runCached(`prepareSosSubmission:${JSON.stringify(input)}`, async () => {
+    const result = await runGraphql({
       query: mutations.prepareSosSubmission,
       variables: {
         input
       }
-    },
-    null
-  )) as any;
+    });
 
-  return ((result?.data?.prepareSosSubmission ?? mockPreparedSosSubmission) as PreparedSosSubmission);
+    return requirePayload(
+      result?.data?.prepareSosSubmission as PreparedSosSubmission | null | undefined,
+      "prepared SOS submission"
+    );
+  });
 }

@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { generateClient } from "aws-amplify/api";
 
 import { CitizenGuidanceCard } from "@/components/ai/citizen-guidance-card";
 import { StatCard } from "@/components/dashboard/stat-card";
@@ -8,23 +10,92 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { useLiveFeed } from "@/hooks/use-live-feed";
-import { mockDashboardStats, mockDisasters, mockSafeZones } from "@/lib/mock-data";
+import { configureAmplify } from "@/lib/aws/amplify";
+import { queries } from "@/lib/aws/graphql/operations";
+import type { DashboardStats, Disaster, SafeZone } from "@/lib/types";
 import { percent } from "@/lib/utils";
 
+const emptyStats: DashboardStats = {
+  activeDisasters: 0,
+  pendingSOS: 0,
+  totalResources: 0,
+  totalSafeZones: 0,
+  totalUsers: 0
+};
+
 export default function CitizenDashboardPage() {
+  const hasAwsConfig = Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL);
   const { alerts, loading, news } = useLiveFeed();
+  const [stats, setStats] = useState<DashboardStats>(emptyStats);
+  const [disaster, setDisaster] = useState<Disaster | null>(null);
+  const [safeZones, setSafeZones] = useState<SafeZone[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const latestAlert = alerts[0] ?? null;
   const latestNews = news[0] ?? null;
 
+  useEffect(() => {
+    if (!hasAwsConfig) {
+      setError("Live backend is not configured.");
+      return;
+    }
+
+    let active = true;
+
+    async function loadDashboard() {
+      configureAmplify();
+      const client = generateClient();
+
+      try {
+        setError(null);
+
+        const [statsResult, disastersResult, safeZonesResult] = await Promise.all([
+          client.graphql({ query: queries.getDashboardStats, authMode: "userPool" }),
+          client.graphql({
+            query: queries.getDisasters,
+            authMode: "userPool",
+            variables: { status: "active" }
+          }),
+          client.graphql({ query: queries.getSafeZones, authMode: "userPool" })
+        ]);
+
+        if (!active) return;
+
+        setStats(((statsResult as any).data?.getDashboardStats ?? emptyStats) as DashboardStats);
+
+        const nextDisasters = ((disastersResult as any).data?.getDisasters ?? []) as Disaster[];
+        setDisaster(nextDisasters[0] ?? null);
+        setSafeZones(((safeZonesResult as any).data?.getSafeZones ?? []) as SafeZone[]);
+      } catch (loadError) {
+        if (!active) return;
+        setStats(emptyStats);
+        setDisaster(null);
+        setSafeZones([]);
+        setError(loadError instanceof Error ? loadError.message : "Unable to load the live citizen dashboard.");
+      }
+    }
+
+    void loadDashboard();
+
+    return () => {
+      active = false;
+    };
+  }, [hasAwsConfig]);
+
   return (
     <div className="space-y-6">
-      <CitizenGuidanceCard disasterId={mockDisasters[0]?.id} />
+      <CitizenGuidanceCard disasterId={disaster?.id} />
+
+      {error ? (
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          {error}
+        </div>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard helper="Currently affecting the region." label="Active disasters" value={mockDashboardStats.activeDisasters} />
-        <StatCard helper="Responders and government users." label="Connected responders" value={184} />
-        <StatCard helper="Live shelter inventory." label="Safe zones" value={mockDashboardStats.totalSafeZones} />
-        <StatCard helper="Pending community requests." label="Open aid requests" value={mockDashboardStats.pendingSOS} />
+        <StatCard helper="Currently affecting the region." label="Active disasters" value={stats.activeDisasters} />
+        <StatCard helper="Citizens, NGOs, and officials on the platform." label="Registered users" value={stats.totalUsers} />
+        <StatCard helper="Live shelter inventory." label="Safe zones" value={stats.totalSafeZones} />
+        <StatCard helper="Pending community requests." label="Open aid requests" value={stats.pendingSOS} />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
@@ -34,7 +105,7 @@ export default function CitizenDashboardPage() {
             Capacity-aware shelter suggestions that avoid already crowded camps.
           </CardDescription>
           <div className="mt-6 space-y-4">
-            {mockSafeZones.map((zone) => (
+            {safeZones.map((zone) => (
               <Link
                 className="block rounded-2xl border border-slate-800 bg-slate-950/40 p-4 transition hover:border-primary/60 hover:bg-slate-950/70"
                 href={`/citizen/map?safeZone=${zone.id}`}
@@ -66,6 +137,11 @@ export default function CitizenDashboardPage() {
                 <p className="mt-4 text-xs text-primary">Open on live map</p>
               </Link>
             ))}
+            {!safeZones.length ? (
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-muted">
+                No live safe zones are currently available.
+              </div>
+            ) : null}
           </div>
         </Card>
 
@@ -77,13 +153,15 @@ export default function CitizenDashboardPage() {
           <div className="mt-6 rounded-2xl border border-danger/40 bg-danger/10 p-5">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-lg font-semibold">{mockDisasters[0].title}</p>
-                <p className="mt-2 text-sm text-slate-200">{mockDisasters[0].description}</p>
+                <p className="text-lg font-semibold">{disaster?.title ?? "No active disaster available"}</p>
+                <p className="mt-2 text-sm text-slate-200">
+                  {disaster?.description ?? "The live backend did not return an active public incident brief."}
+                </p>
               </div>
-              <Badge className="border-danger/40 bg-danger/10 text-red-200">{mockDisasters[0].severity}</Badge>
+              <Badge className="border-danger/40 bg-danger/10 text-red-200">{disaster?.severity ?? "unknown"}</Badge>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
-              {(mockDisasters[0].secondaryRisks ?? []).map((risk) => (
+              {(disaster?.secondaryRisks ?? []).map((risk) => (
                 <Badge key={risk}>{risk}</Badge>
               ))}
             </div>

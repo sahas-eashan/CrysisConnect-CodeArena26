@@ -10,12 +10,11 @@ import { Input } from "@/components/ui/input";
 import { useGeolocation } from "@/hooks/use-geolocation";
 import { configureAmplify } from "@/lib/aws/amplify";
 import { mutations, queries } from "@/lib/aws/graphql/operations";
-import { mockSOSSignals } from "@/lib/mock-data";
 import type { SOSSignal } from "@/lib/types";
 
 export default function CitizenSOSPage() {
   const hasAwsConfig = Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL);
-  const [signals, setSignals] = useState<SOSSignal[]>(() => (hasAwsConfig ? [] : mockSOSSignals));
+  const [signals, setSignals] = useState<SOSSignal[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -74,21 +73,7 @@ export default function CitizenSOSPage() {
     }
 
     if (!hasAwsConfig) {
-      setSignals((current) => [
-        {
-          id: `demo-sos-${Date.now()}`,
-          senderId: "demo-citizen",
-          location: geoJson,
-          type,
-          description,
-          status: "pending",
-          createdAt: new Date().toISOString()
-        },
-        ...current
-      ]);
-      setSosType("medical");
-      setDescription("");
-      setMessage("Demo mode: SOS saved locally.");
+      setSubmitError("Live backend is not configured.");
       return;
     }
 

@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { configureAmplify } from "@/lib/aws/amplify";
 import { mutations, queries, subscriptions } from "@/lib/aws/graphql/operations";
-import { mockSOSSignals } from "@/lib/mock-data";
 import type { SOSSignal } from "@/lib/types";
 
 function sortSignals(signals: SOSSignal[]) {
@@ -30,16 +29,19 @@ function sortSignals(signals: SOSSignal[]) {
 
 export default function NgoSOSQueuePage() {
   const hasAwsConfig = Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL);
-  const [signals, setSignals] = useState<SOSSignal[]>(() => (hasAwsConfig ? [] : sortSignals(mockSOSSignals)));
+  const [signals, setSignals] = useState<SOSSignal[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [liveMessage, setLiveMessage] = useState(
-    hasAwsConfig ? "Loading live SOS queue from the backend..." : "Demo mode: showing local SOS examples."
+    hasAwsConfig ? "Loading live SOS queue from the backend..." : "Live backend is not configured."
   );
   const [loading, setLoading] = useState(Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL));
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!hasAwsConfig) return;
+    if (!hasAwsConfig) {
+      setSignals([]);
+      return;
+    }
 
     configureAmplify();
     const client = generateClient();
@@ -113,14 +115,7 @@ export default function NgoSOSQueuePage() {
 
   async function onAccept(signalId: string) {
     if (!hasAwsConfig) {
-      setSignals((current) =>
-        sortSignals(
-          current.map((signal) =>
-            signal.id === signalId ? { ...signal, status: "assigned", assignedTo: "demo-ngo-user" } : signal
-          )
-        )
-      );
-      setLiveMessage("Demo mode: dispatch accepted locally.");
+      setError("Live backend is not configured.");
       return;
     }
 
@@ -155,7 +150,7 @@ export default function NgoSOSQueuePage() {
 
   return (
     <div className="space-y-6">
-      <NgoSosAiAssist sosId={signals[0]?.id ?? mockSOSSignals[0].id} />
+      <NgoSosAiAssist sosId={signals[0]?.id} />
 
       <Card>
         <CardTitle>Live SOS queue</CardTitle>
