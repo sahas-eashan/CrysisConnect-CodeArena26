@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'sos_confirmation.dart';
+import 'server_route_screen.dart';
 
 import 'package:amplify_api/amplify_api.dart';
 import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
@@ -16,6 +17,7 @@ class AppConfig {
       userPoolId = '',
       userPoolClientId = '',
       graphqlUrl = '',
+      hazardApiUrl = '',
       apiName = 'data';
 
   const AppConfig._({
@@ -23,6 +25,7 @@ class AppConfig {
     required this.userPoolId,
     required this.userPoolClientId,
     required this.graphqlUrl,
+    required this.hazardApiUrl,
     required this.apiName,
   });
 
@@ -34,6 +37,7 @@ class AppConfig {
         'CRISIS_COGNITO_USER_POOL_CLIENT_ID',
       ),
       graphqlUrl: String.fromEnvironment('CRISIS_APPSYNC_GRAPHQL_URL'),
+      hazardApiUrl: String.fromEnvironment('CRISIS_HAZARD_API_URL'),
       apiName: String.fromEnvironment(
         'CRISIS_APPSYNC_API_NAME',
         defaultValue: 'data',
@@ -52,6 +56,7 @@ class AppConfig {
       userPoolId: readString('CRISIS_COGNITO_USER_POOL_ID'),
       userPoolClientId: readString('CRISIS_COGNITO_USER_POOL_CLIENT_ID'),
       graphqlUrl: readString('CRISIS_APPSYNC_GRAPHQL_URL'),
+      hazardApiUrl: readString('CRISIS_HAZARD_API_URL'),
       apiName: readString('CRISIS_APPSYNC_API_NAME', 'data'),
     );
   }
@@ -66,7 +71,11 @@ class AppConfig {
       );
       final decoded = jsonDecode(raw);
       if (decoded is Map<String, dynamic>) {
-        final assetConfig = AppConfig.fromJson(decoded);
+        final assetConfig = AppConfig.fromJson({
+          ...decoded,
+          if (envConfig.hazardApiUrl.isNotEmpty)
+            'CRISIS_HAZARD_API_URL': envConfig.hazardApiUrl,
+        });
         if (assetConfig.isConfigured) {
           return assetConfig;
         }
@@ -82,6 +91,7 @@ class AppConfig {
   final String userPoolId;
   final String userPoolClientId;
   final String graphqlUrl;
+  final String hazardApiUrl;
   final String apiName;
 
   bool get isConfigured =>
@@ -1163,6 +1173,16 @@ class AmplifyBackend {
     return _rootValue(response.data, rootKey);
   }
 
+  Future<String> hazardIdToken() async {
+    await configure();
+    final session = await Amplify.Auth.fetchAuthSession() as CognitoAuthSession;
+    final token = session.userPoolTokensResult.valueOrNull?.idToken.raw;
+    if (!session.isSignedIn || token == null || token.isEmpty) {
+      throw Exception('Sign in again to verify current hazards.');
+    }
+    return token;
+  }
+
   Future<dynamic> mutateRoot(
     String document,
     String rootKey, {
@@ -1370,6 +1390,12 @@ class CitizenRepository {
         .map((row) => Disaster.fromJson(row as Map<String, dynamic>))
         .toList();
   }
+
+  Future<bool> screenRouteOnServer(List<LatLng> coordinates) =>
+      ServerRouteScreen(
+        baseOrigin: _backend.config.hazardApiUrl,
+        idToken: _backend.hazardIdToken,
+      ).call(coordinates);
 
   Future<SafeZone?> loadNearestSafeZoneForLocation(LatLng? location) async {
     if (location == null) return null;

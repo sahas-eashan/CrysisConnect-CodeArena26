@@ -195,6 +195,7 @@ class _MapScreenState extends State<MapScreen> {
         from: from,
         to: destination.destination,
         activeHazardGeometries: hazards.map((hazard) => hazard.affectedArea),
+        screenOnServer: widget.repository.screenRouteOnServer,
       );
       if (!mounted) return;
 

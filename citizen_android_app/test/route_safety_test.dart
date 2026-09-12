@@ -119,6 +119,7 @@ void main() {
     final selected = await fetchScreenedRoute(
       from: const LatLng(1.5, 0),
       to: const LatLng(1.5, 3),
+      screenOnServer: (_) async => true,
       activeHazardGeometries: [square],
       client: client,
     );
@@ -147,6 +148,7 @@ void main() {
         fetchScreenedRoute(
           from: const LatLng(1.5, 0),
           to: const LatLng(1.5, 3),
+          screenOnServer: (_) async => true,
           activeHazardGeometries: [square],
           client: client,
         ),
@@ -176,6 +178,7 @@ void main() {
         fetchScreenedRoute(
           from: const LatLng(1.5, 0),
           to: const LatLng(1.5, 4),
+          screenOnServer: (_) async => true,
           activeHazardGeometries: [square],
           client: client,
         ),
@@ -207,6 +210,7 @@ void main() {
           fetchScreenedRoute(
             from: const LatLng(0, 0),
             to: const LatLng(0, 3),
+            screenOnServer: (_) async => true,
             activeHazardGeometries: [],
             client: MockClient((_) async => response),
           ),

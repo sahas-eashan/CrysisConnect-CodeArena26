@@ -146,6 +146,7 @@ Future<ScreenedRoute> fetchScreenedRoute({
   required LatLng from,
   required LatLng to,
   required Iterable<String?> activeHazardGeometries,
+  required Future<bool> Function(List<LatLng> coordinates) screenOnServer,
   http.Client? client,
 }) async {
   final rings = hazardRings(activeHazardGeometries);
@@ -170,13 +171,16 @@ Future<ScreenedRoute> fetchScreenedRoute({
       );
     }
     for (final route in data['routes'] as List) {
+      late List<LatLng> points;
+      late double distance;
+      late double duration;
       try {
         if (route['geometry']['type'] != 'LineString') continue;
-        final points = (route['geometry']['coordinates'] as List)
+        points = (route['geometry']['coordinates'] as List)
             .map(_position)
             .toList();
-        final distance = (route['distance'] as num).toDouble();
-        final duration = (route['duration'] as num).toDouble();
+        distance = (route['distance'] as num).toDouble();
+        duration = (route['duration'] as num).toDouble();
         if (!distance.isFinite ||
             !duration.isFinite ||
             distance < 0 ||
@@ -184,16 +188,19 @@ Future<ScreenedRoute> fetchScreenedRoute({
             points.length < 2) {
           continue;
         }
-        // Also screen access between the actual endpoints and the provider's snapped road endpoints.
-        if (!avoidsHazards([from, ...points, to], rings)) continue;
-        return ScreenedRoute(
-          points: points,
-          distanceKm: distance / 1000,
-          durationMin: duration / 60,
-        );
       } catch (_) {
         // A malformed alternative is discarded; subsequent alternatives still get checked.
+        continue;
       }
+      // Both screens include access from the actual endpoints to snapped road endpoints.
+      final screened = [from, ...points, to];
+      if (!avoidsHazards(screened, rings)) continue;
+      if (!await screenOnServer(screened)) continue;
+      return ScreenedRoute(
+        points: points,
+        distanceKm: distance / 1000,
+        durationMin: duration / 60,
+      );
     }
     throw const NoVerifiedRoute(
       'All returned alternatives cross a known hazard or contain invalid geometry. Follow official evacuation instructions.',
