@@ -172,21 +172,37 @@ export default function NgoDashboardPage() {
         </div>
       ) : null}
 
-      <Link href="/ngo/map">
-        <Card className="transition hover:border-primary/60 hover:bg-slate-950/70">
+      <section className="space-y-4">
+        <div>
           <CardTitle>Today&apos;s operational focus</CardTitle>
           <CardDescription className="mt-2">
-            Coordinate field workers around the highest-impact incident zone.
+            Coordinate field workers around the highest-impact incident zones.
           </CardDescription>
-          <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
-            <p className="font-medium text-white">{state.disaster?.title ?? "No active disaster available"}</p>
-            <p className="mt-2 text-sm text-muted">
-              {state.disaster?.description ?? "The backend did not return an active disaster summary."}
-            </p>
-            <p className="mt-4 text-xs text-primary">Open on operations map</p>
-          </div>
-        </Card>
-      </Link>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-2">
+          {state.activeDisasters.length ? (
+            state.activeDisasters.map((disaster) => (
+              <Link href="/ngo/map" key={disaster.id}>
+                <Card className="h-full transition hover:border-primary/60 hover:bg-slate-950/70">
+                  <p className="font-medium text-white">{disaster.title}</p>
+                  <p className="mt-2 text-sm text-muted">
+                    {disaster.description ?? "No disaster summary was returned from the backend."}
+                  </p>
+                  <p className="mt-4 text-xs text-primary">Open on operations map</p>
+                </Card>
+              </Link>
+            ))
+          ) : (
+            <Card>
+              <p className="font-medium text-white">No active disaster available</p>
+              <p className="mt-2 text-sm text-muted">
+                The backend did not return any active disasters for today&apos;s operational focus.
+              </p>
+            </Card>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
