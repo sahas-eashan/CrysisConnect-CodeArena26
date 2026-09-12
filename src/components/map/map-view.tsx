@@ -66,10 +66,21 @@ export function MapView({
     const markerInstances: maplibregl.Marker[] = [];
     markers.forEach((marker) => {
       const popup = marker.popup ? new maplibregl.Popup({ offset: 8 }).setHTML(marker.popup) : undefined;
-      const markerInstance = new maplibregl.Marker({ color: marker.color ?? "#38bdf8" }).setLngLat([
-        marker.longitude,
-        marker.latitude
-      ]);
+      const markerElement = document.createElement("div");
+      markerElement.className = "flex flex-col items-center gap-1";
+
+      const pinElement = document.createElement("div");
+      pinElement.className = "h-4 w-4 rounded-full border-2 border-white shadow-lg";
+      pinElement.style.backgroundColor = marker.color ?? "#38bdf8";
+      markerElement.appendChild(pinElement);
+
+      const labelElement = document.createElement("div");
+      labelElement.className =
+        "max-w-[12rem] rounded-full border border-slate-700 bg-slate-950/90 px-2 py-1 text-center text-[11px] font-medium leading-tight text-white shadow-lg";
+      labelElement.textContent = marker.label;
+      markerElement.appendChild(labelElement);
+
+      const markerInstance = new maplibregl.Marker({ element: markerElement }).setLngLat([marker.longitude, marker.latitude]);
       if (popup) markerInstance.setPopup(popup);
       markerInstance.addTo(map);
       markerInstances.push(markerInstance);

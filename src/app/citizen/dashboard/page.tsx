@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { StatCard } from "@/components/dashboard/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,7 +25,11 @@ export default function CitizenDashboardPage() {
           </CardDescription>
           <div className="mt-6 space-y-4">
             {mockSafeZones.map((zone) => (
-              <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4" key={zone.id}>
+              <Link
+                className="block rounded-2xl border border-slate-800 bg-slate-950/40 p-4 transition hover:border-primary/60 hover:bg-slate-950/70"
+                href={`/citizen/map?safeZone=${zone.id}`}
+                key={zone.id}
+              >
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="font-medium text-white">{zone.name}</p>
@@ -47,7 +53,8 @@ export default function CitizenDashboardPage() {
                     />
                   </div>
                 </div>
-              </div>
+                <p className="mt-4 text-xs text-primary">Open on live map</p>
+              </Link>
             ))}
           </div>
         </Card>
