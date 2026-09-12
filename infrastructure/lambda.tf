@@ -39,14 +39,19 @@ resource "aws_lambda_function" "worker" {
 
   environment {
     variables = {
-      DB_HOST       = aws_db_instance.postgres.address
-      DB_PORT       = tostring(aws_db_instance.postgres.port)
-      DB_NAME       = var.db_name
-      DB_USER       = var.db_username
-      DB_PASSWORD   = var.db_password
-      S3_BUCKET     = aws_s3_bucket.uploads.bucket
-      SNS_TOPIC_ARN = aws_sns_topic.alerts.arn
-      SES_FROM      = var.ses_sender_email
+      DB_HOST             = aws_db_instance.postgres.address
+      DB_PORT             = tostring(aws_db_instance.postgres.port)
+      DB_NAME             = var.db_name
+      DB_USER             = var.db_username
+      DB_PASSWORD         = var.db_password
+      S3_BUCKET           = aws_s3_bucket.uploads.bucket
+      SNS_TOPIC_ARN       = aws_sns_topic.alerts.arn
+      SES_FROM            = var.ses_sender_email
+      NOTIFYLK_USER_ID    = var.notifylk_user_id
+      NOTIFYLK_API_KEY    = var.notifylk_api_key
+      NOTIFYLK_SENDER_ID  = var.notifylk_sender_id
+      NOTIFYLK_SMS_TYPE   = var.notifylk_sms_type
+      DEMO_SMS_RECIPIENTS = var.demo_sms_recipients
     }
   }
 
