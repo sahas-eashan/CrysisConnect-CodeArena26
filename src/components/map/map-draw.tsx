@@ -5,6 +5,7 @@ import maplibregl, { GeoJSONSource, Map } from "maplibre-gl";
 
 import "maplibre-gl/dist/maplibre-gl.css";
 
+import { openStreetMapStyle } from "@/lib/map-style";
 import { Button } from "@/components/ui/button";
 
 type DrawPoint = [number, number];
@@ -32,7 +33,7 @@ export function MapDraw({
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: "https://demotiles.maplibre.org/style.json",
+      style: openStreetMapStyle,
       center: [79.8612, 6.9271],
       zoom: 12
     });
@@ -119,7 +120,7 @@ export function MapDraw({
   return (
     <div className="space-y-3">
       <div
-        className="h-[380px] w-full overflow-hidden rounded-2xl border border-slate-800"
+        className="aspect-square w-full overflow-hidden rounded-2xl border border-slate-800"
         ref={containerRef}
       />
       <div className="flex items-center justify-between gap-3 text-sm text-muted">

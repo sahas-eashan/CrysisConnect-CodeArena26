@@ -9,6 +9,32 @@ import { parseGeoJsonPoint } from "@/lib/utils";
 import { mockDisasters, mockResources, mockSafeZones } from "@/lib/mock-data";
 import type { MapMarker } from "@/lib/types";
 
+function isPointInsidePolygon(
+  point: { longitude: number; latitude: number } | null,
+  polygon: { type: string; coordinates: number[][][] }
+) {
+  if (!point || polygon.type !== "Polygon" || !polygon.coordinates.length) return false;
+
+  const ring = polygon.coordinates[0];
+  let inside = false;
+
+  for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index++) {
+    const [currentLongitude, currentLatitude] = ring[index];
+    const [previousLongitude, previousLatitude] = ring[previous];
+
+    const intersects =
+      currentLatitude > point.latitude !== previousLatitude > point.latitude &&
+      point.longitude <
+        ((previousLongitude - currentLongitude) * (point.latitude - currentLatitude)) /
+          (previousLatitude - currentLatitude) +
+          currentLongitude;
+
+    if (intersects) inside = !inside;
+  }
+
+  return inside;
+}
+
 export default function CitizenMapPage() {
   const searchParams = useSearchParams();
   const selectedSafeZoneId = searchParams.get("safeZone");
@@ -54,6 +80,7 @@ export default function CitizenMapPage() {
       latitude: Math.max(...latitudes) - 0.001
     };
   }, []);
+  const isUserAffected = useMemo(() => isPointInsidePolygon(userLocation, disasterPolygon), [userLocation]);
 
   const markers: MapMarker[] = [
     ...markersFromPoints(mockSafeZones.map((zone) => ({ id: zone.id, name: zone.name, location: zone.location, color: "#22c55e" }))),
@@ -91,45 +118,56 @@ export default function CitizenMapPage() {
         <CardDescription className="mt-2">
           Red zones show affected areas, green markers show safe zones, and amber markers show resource depots.
         </CardDescription>
-        <div className="mt-6">
+        <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,36rem)_18rem] lg:items-start lg:justify-center">
           <MapView
+            className="mx-auto max-w-[36rem] lg:mx-0"
             center={
               selectedSafeZonePoint ? [selectedSafeZonePoint.longitude, selectedSafeZonePoint.latitude] : undefined
             }
             markers={markers}
             polygons={[JSON.stringify(disasterPolygon)]}
           />
+          <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
+            <p className="text-sm font-semibold text-white">Map legend</p>
+            <div className="mt-4 space-y-3 text-sm text-slate-300">
+              <div className="flex items-center gap-3">
+                <span className="h-3 w-3 rounded-full bg-amber-500" />
+                <span>Resources</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="h-3 w-3 rounded-full bg-green-500" />
+                <span>Shelters</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="h-3 w-3 rounded-full bg-blue-500" />
+                <span>You</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="h-3 w-3 rounded-sm bg-red-500/80" />
+                <span>Disaster zone</span>
+              </div>
+            </div>
+          </div>
         </div>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className={`grid gap-4 ${isUserAffected ? "md:grid-cols-2" : "md:grid-cols-1"}`}>
         <Card>
-          <CardTitle>Map legend</CardTitle>
-          <CardDescription className="mt-2">Green pins are safe zones, and the blue pin is your current location.</CardDescription>
+          <CardTitle>Disaster impact</CardTitle>
+          <CardDescription className="mt-2">
+            {userLocation
+              ? isUserAffected
+                ? `You are currently inside the ${mockDisasters[0].title} disaster zone.`
+                : `You are currently outside the ${mockDisasters[0].title} disaster zone.`
+              : "Allow location access to check whether you are inside the disaster zone."}
+          </CardDescription>
         </Card>
-        <Card>
-          <CardTitle>Resource pins</CardTitle>
-          <CardDescription className="mt-2">Orange pins mark supplies such as water and first-aid stock.</CardDescription>
-        </Card>
-        <Card>
-          <CardTitle>Red area</CardTitle>
-          <CardDescription className="mt-2">The red square is the active disaster impact area for {mockDisasters[0].title}.</CardDescription>
-        </Card>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardTitle>Affected zone</CardTitle>
-          <CardDescription className="mt-2">{mockDisasters[0].title}</CardDescription>
-        </Card>
-        <Card>
-          <CardTitle>Recommended shelter</CardTitle>
-          <CardDescription className="mt-2">{selectedSafeZone?.name}</CardDescription>
-        </Card>
-        <Card>
-          <CardTitle>Nearest water supply</CardTitle>
-          <CardDescription className="mt-2">{mockResources[0].name}</CardDescription>
-        </Card>
+        {isUserAffected ? (
+          <Card>
+            <CardTitle>Recommended shelter</CardTitle>
+            <CardDescription className="mt-2">{selectedSafeZone?.name}</CardDescription>
+          </Card>
+        ) : null}
       </div>
     </div>
   );

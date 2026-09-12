@@ -34,8 +34,8 @@ export default function CitizenResourcesPage() {
         setError(null);
 
         const [resourcesResult, requestsResult] = await Promise.allSettled([
-          client.graphql({ query: queries.getResources }),
-          client.graphql({ query: queries.getMyResourceRequests })
+          client.graphql({ query: queries.getResources, authMode: "userPool" }),
+          client.graphql({ query: queries.getMyResourceRequests, authMode: "userPool" })
         ]);
         if (!active) return;
 
@@ -99,6 +99,7 @@ export default function CitizenResourcesPage() {
 
       const result = await client.graphql({
         query: mutations.requestResource,
+        authMode: "userPool",
         variables: {
           input: {
             resourceId: matchedResource?.id ?? null,
