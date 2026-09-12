@@ -220,6 +220,21 @@ function mapAlert(row: Record<string, any>) {
   };
 }
 
+function normalizeTargetRoles(inputRoles: unknown) {
+  if (!Array.isArray(inputRoles)) return [] as string[];
+
+  const expanded = inputRoles.flatMap((value) => {
+    if (typeof value !== "string") return [];
+
+    const role = value.trim();
+    if (!role) return [];
+    if (role === "ngo") return ["ngo_individual", "ngo_org_member"];
+    return [role];
+  });
+
+  return [...new Set(expanded)];
+}
+
 function mapOrganization(row: Record<string, any>) {
   return {
     id: row.id,
@@ -390,7 +405,7 @@ export async function handler(event: AppSyncEvent) {
            AND (
              target_roles IS NULL
              OR cardinality(target_roles) = 0
-             OR $2::user_role = ANY(target_roles)
+             OR $2::text = ANY(target_roles::text[])
            )
          ORDER BY created_at DESC`,
         [args.disasterId ?? null, role]
@@ -625,10 +640,11 @@ export async function handler(event: AppSyncEvent) {
     case "sendAlert": {
       requireGroup(event, ["government"]);
       const input = args.input;
+      const targetRoles = normalizeTargetRoles(input.targetRoles);
       await pool.query(
         `INSERT INTO notifications (title, body, type, channel, target_area, target_roles, disaster_id, created_by)
          VALUES ($1, $2, 'disaster_alert', $3, ${geoJsonSql(input.targetArea)}, $4, $5, $6)`,
-        [input.title, input.body, input.channel, input.targetRoles ?? [], input.disasterId ?? null, userId]
+        [input.title, input.body, input.channel, targetRoles, input.disasterId ?? null, userId]
       );
 
       await triggerWorker({ action: "DIRECT_ALERT", alert: input });

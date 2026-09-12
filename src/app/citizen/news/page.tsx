@@ -18,26 +18,18 @@ function formatTimestamp(value?: string | null) {
 }
 
 export default function CitizenNewsPage() {
-  const { alerts, error, loading, news, status } = useLiveFeed();
+  const { alerts, alertsError, loading, news, newsError } = useLiveFeed();
 
   return (
     <div className="space-y-6">
       <Card>
-        <CardTitle>News and public advisories</CardTitle>
-        <CardDescription className="mt-2">
-          Government alerts and NGO field updates are loaded from the live backend database.
-        </CardDescription>
-        <p className="mt-3 text-sm text-primary">{status}</p>
-        {error ? (
+        <CardTitle>Emergency alerts</CardTitle>
+        <CardDescription className="mt-2">Stored alerts from the `notifications` table appear here first.</CardDescription>
+        {alertsError ? (
           <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-            {error}
+            {alertsError}
           </div>
         ) : null}
-      </Card>
-
-      <Card>
-        <CardTitle>Emergency alerts</CardTitle>
-        <CardDescription className="mt-2">Stored alerts targeted to your role appear here first.</CardDescription>
         <div className="mt-6 space-y-4">
           {alerts.map((item) => (
             <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5" key={item.id}>
@@ -66,7 +58,12 @@ export default function CitizenNewsPage() {
 
       <Card>
         <CardTitle>Field news</CardTitle>
-        <CardDescription className="mt-2">Verified situation reports from response teams and authorities.</CardDescription>
+        <CardDescription className="mt-2">Verified reports from the `news_updates` table.</CardDescription>
+        {newsError ? (
+          <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            {newsError}
+          </div>
+        ) : null}
         <div className="mt-6 space-y-4">
           {news.map((item) => (
             <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5" key={item.id}>

@@ -11,17 +11,19 @@ import { useSubscription } from "./use-subscription";
 
 type LiveFeedState = {
   alerts: Alert[];
-  error: string | null;
+  alertsError: string | null;
   loading: boolean;
   news: NewsUpdate[];
+  newsError: string | null;
   status: string;
 };
 
 const defaultState: LiveFeedState = {
   alerts: [],
-  error: null,
+  alertsError: null,
   loading: Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL),
   news: [],
+  newsError: null,
   status: process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL
     ? "Loading live news and alerts from the backend..."
     : "Live backend is not configured."
@@ -69,8 +71,10 @@ export function useLiveFeed() {
       try {
         setState((current) => ({
           ...current,
-          error: null,
+          alertsError: null,
           loading: true
+          ,
+          newsError: null
         }));
 
         const [alertsResult, newsResult] = await Promise.allSettled([
@@ -87,26 +91,27 @@ export function useLiveFeed() {
             ? (((newsResult.value as any).data?.getNewsUpdates ?? []) as NewsUpdate[])
             : [];
 
-        const errorMessages = [
+        const alertsError =
           alertsResult.status === "rejected"
             ? alertsResult.reason instanceof Error
               ? alertsResult.reason.message
               : "Unable to load alerts from the backend."
-            : null,
+            : null;
+        const newsError =
           newsResult.status === "rejected"
             ? newsResult.reason instanceof Error
               ? newsResult.reason.message
               : "Unable to load news from the backend."
-            : null
-        ].filter((message): message is string => Boolean(message));
+            : null;
 
         setState({
           alerts,
-          error: errorMessages[0] ?? null,
+          alertsError,
           loading: false,
           news,
+          newsError,
           status:
-            errorMessages.length > 0
+            alertsError || newsError
               ? "Live feed loaded with partial data."
               : "Connected to live news and alerts."
         });
@@ -115,9 +120,10 @@ export function useLiveFeed() {
 
         setState({
           alerts: [],
-          error: error instanceof Error ? error.message : "Unable to load the live feed.",
+          alertsError: error instanceof Error ? error.message : "Unable to load alerts from the backend.",
           loading: false,
           news: [],
+          newsError: error instanceof Error ? error.message : "Unable to load news from the backend.",
           status: "Unable to reach the live backend."
         });
       }
