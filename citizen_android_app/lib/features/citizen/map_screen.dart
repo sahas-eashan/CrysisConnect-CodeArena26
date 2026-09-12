@@ -228,29 +228,35 @@ class _MapScreenState extends State<MapScreen> {
                 ),
               ),
               Positioned(
-                left: 24,
-                right: 24,
-                bottom: 194,
-                child: FilledButton.icon(
-                  onPressed: _refresh,
-                  icon: const Icon(Icons.my_location_rounded),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.secondary,
-                    padding: const EdgeInsets.symmetric(vertical: 18),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24),
+                left: 20,
+                right: 20,
+                bottom: 116,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: FilledButton.icon(
+                        onPressed: _refresh,
+                        icon: const Icon(Icons.my_location_rounded),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.secondary,
+                          padding: const EdgeInsets.symmetric(vertical: 18),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                        ),
+                        label: Text(AppLocalizations.of(context)!.getMeToSafety),
+                      ),
                     ),
-                  ),
-                  label: Text(AppLocalizations.of(context)!.getMeToSafety),
+                    if (bundle.nearestSafeZone != null) ...[
+                      const SizedBox(height: 16),
+                      _SafeZoneSheet(zone: bundle.nearestSafeZone!),
+                    ],
+                  ],
                 ),
               ),
-              if (bundle.nearestSafeZone != null)
-                Positioned(
-                  left: 20,
-                  right: 20,
-                  bottom: 92,
-                  child: _SafeZoneSheet(zone: bundle.nearestSafeZone!),
-                ),
             ],
           ),
         );
