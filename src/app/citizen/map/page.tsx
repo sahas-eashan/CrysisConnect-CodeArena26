@@ -91,31 +91,38 @@ export default function CitizenMapPage() {
         <CardDescription className="mt-2">
           Red zones show affected areas, green markers show safe zones, and amber markers show resource depots.
         </CardDescription>
-        <div className="mt-6">
+        <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,36rem)_18rem] lg:items-start lg:justify-center">
           <MapView
+            className="mx-auto max-w-[36rem] lg:mx-0"
             center={
               selectedSafeZonePoint ? [selectedSafeZonePoint.longitude, selectedSafeZonePoint.latitude] : undefined
             }
             markers={markers}
             polygons={[JSON.stringify(disasterPolygon)]}
           />
+          <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
+            <p className="text-sm font-semibold text-white">Map legend</p>
+            <div className="mt-4 space-y-3 text-sm text-slate-300">
+              <div className="flex items-center gap-3">
+                <span className="h-3 w-3 rounded-full bg-amber-500" />
+                <span>Resources</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="h-3 w-3 rounded-full bg-green-500" />
+                <span>Shelters</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="h-3 w-3 rounded-full bg-blue-500" />
+                <span>You</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="h-3 w-3 rounded-sm bg-red-500/80" />
+                <span>Disaster zone</span>
+              </div>
+            </div>
+          </div>
         </div>
       </Card>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardTitle>Map legend</CardTitle>
-          <CardDescription className="mt-2">Green pins are safe zones, and the blue pin is your current location.</CardDescription>
-        </Card>
-        <Card>
-          <CardTitle>Resource pins</CardTitle>
-          <CardDescription className="mt-2">Orange pins mark supplies such as water and first-aid stock.</CardDescription>
-        </Card>
-        <Card>
-          <CardTitle>Red area</CardTitle>
-          <CardDescription className="mt-2">The red square is the active disaster impact area for {mockDisasters[0].title}.</CardDescription>
-        </Card>
-      </div>
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card>

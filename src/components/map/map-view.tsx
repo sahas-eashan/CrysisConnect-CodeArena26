@@ -5,6 +5,7 @@ import maplibregl, { GeoJSONSource, LngLatLike, Map } from "maplibre-gl";
 
 import "maplibre-gl/dist/maplibre-gl.css";
 
+import { openStreetMapStyle } from "@/lib/map-style";
 import type { MapMarker } from "@/lib/types";
 import { parseGeoJsonPoint } from "@/lib/utils";
 
@@ -45,7 +46,7 @@ export function MapView({
 
     const map = new maplibregl.Map({
       container: mapRef.current,
-      style: "https://demotiles.maplibre.org/style.json",
+      style: openStreetMapStyle,
       center,
       zoom
     });
@@ -167,7 +168,7 @@ export function MapView({
     else map.once("load", upsert);
   }, [normalizedPolygons]);
 
-  return <div className={`h-[420px] w-full overflow-hidden rounded-2xl border border-slate-800 ${className}`} ref={mapRef} />;
+  return <div className={`aspect-square w-full overflow-hidden rounded-2xl border border-slate-800 ${className}`} ref={mapRef} />;
 }
 
 export function markersFromPoints(points: { id: string; name: string; location?: string | null; color?: string }[]) {
