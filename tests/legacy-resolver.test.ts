@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
 import { test, mock } from "node:test";
-import { Pool } from "pg";
 import { handler } from "../lambda/resolver/index";
+
+// Lambda packaging installs its own pg copy. Resolve from the handler's package
+// so these mocks always intercept its Pool, with or without nested node_modules.
+const resolverRequire = createRequire(new URL("../lambda/resolver/package.json", import.meta.url));
+const { Pool } = resolverRequire("pg") as typeof import("pg");
 
 const citizen = { sub: "signed-in-user", claims: { "cognito:groups": ["citizen"] } };
 const government = { sub: "duty-officer", claims: { "cognito:groups": ["government"] } };

@@ -17,3 +17,8 @@ infrastructure/.terraform.lock.hcl
 lambda/**/node_modules
 *.log
 *.tsbuildinfo
+.data/
+playwright-report/
+test-results/
+infrastructure/build/
+public/maplibre/

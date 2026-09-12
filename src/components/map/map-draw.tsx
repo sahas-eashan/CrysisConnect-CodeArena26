@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import maplibregl, { GeoJSONSource, Map } from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
+import type { GeoJSONSource, Map } from "maplibre-gl";
 
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import { openStreetMapStyle } from "@/lib/map-style";
+import { configureMapClient } from "@/lib/map-client";
 import { Button } from "@/components/ui/button";
 
 type DrawPoint = [number, number];
@@ -27,25 +29,37 @@ export function MapDraw({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Map | null>(null);
   const [points, setPoints] = useState<DrawPoint[]>([]);
+  const [mapError, setMapError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
-    const map = new maplibregl.Map({
-      container: containerRef.current,
-      style: openStreetMapStyle,
-      center: [79.8612, 6.9271],
-      zoom: 12
-    });
+    let map: Map;
+    try {
+      configureMapClient();
+      map = new maplibregl.Map({
+        container: containerRef.current,
+        style: openStreetMapStyle,
+        center: [79.8612, 6.9271],
+        zoom: 12
+      });
+    } catch {
+      setMapError("This browser could not start the drawing map. Enable graphics acceleration or use another browser before drawing an affected area.");
+      return;
+    }
 
     map.addControl(new maplibregl.NavigationControl(), "top-right");
+    map.on("error", () => setMapError("Some map layers could not load. Check your connection before marking an affected area."));
     map.on("click", (event) => {
       setPoints((current) => [...current, [event.lngLat.lng, event.lngLat.lat]]);
     });
 
     mapRef.current = map;
+    const resizeObserver = new ResizeObserver(() => map.resize());
+    resizeObserver.observe(containerRef.current);
 
     return () => {
+      resizeObserver.disconnect();
       map.remove();
       mapRef.current = null;
     };
@@ -115,6 +129,7 @@ export function MapDraw({
     if (polygon && onGeometryChange) {
       onGeometryChange(JSON.stringify(polygon));
     }
+    return () => { map.off("load", upsert); };
   }, [onGeometryChange, points]);
 
   return (
@@ -123,6 +138,7 @@ export function MapDraw({
         className="aspect-square w-full overflow-hidden rounded-2xl border border-slate-800"
         ref={containerRef}
       />
+      {mapError ? <p className="rounded-xl border border-amber-700/50 bg-amber-950/30 p-3 text-sm text-amber-200" role="status">{mapError}</p> : null}
       <div className="flex items-center justify-between gap-3 text-sm text-muted">
         <p>Click on the map to add polygon points. After the third point, the affected area closes automatically.</p>
         <Button onClick={() => setPoints([])} variant="outline">

@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
-import maplibregl, { GeoJSONSource, LngLatLike, Map } from "maplibre-gl";
+import { useEffect, useMemo, useRef, useState } from "react";
+import * as maplibregl from "maplibre-gl";
+import type { GeoJSONSource, LngLatLike, Map } from "maplibre-gl";
 
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import { openStreetMapStyle } from "@/lib/map-style";
+import { configureMapClient } from "@/lib/map-client";
 import type { MapMarker } from "@/lib/types";
 import { parseGeoJsonPoint } from "@/lib/utils";
 
@@ -14,6 +16,7 @@ type MapViewProps = {
   zoom?: number;
   markers?: MapMarker[];
   polygons?: string[];
+  route?: [number, number][];
   className?: string;
 };
 
@@ -22,10 +25,15 @@ export function MapView({
   zoom = 11,
   markers = [],
   polygons = [],
+  route = [],
   className = ""
 }: MapViewProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const instanceRef = useRef<Map | null>(null);
+  const [mapError, setMapError] = useState<string | null>(null);
+  const [mapLoading, setMapLoading] = useState(true);
+  const initialView = useRef({ center, zoom });
+  const { lng: centerLongitude, lat: centerLatitude } = maplibregl.LngLat.convert(center);
 
   const normalizedPolygons = useMemo(
     () =>
@@ -44,21 +52,40 @@ export function MapView({
   useEffect(() => {
     if (!mapRef.current || instanceRef.current) return;
 
-    const map = new maplibregl.Map({
-      container: mapRef.current,
-      style: openStreetMapStyle,
-      center,
-      zoom
-    });
+    let map: Map;
+    try {
+      configureMapClient();
+      map = new maplibregl.Map({
+        container: mapRef.current,
+        style: openStreetMapStyle,
+        center: initialView.current.center,
+        zoom: initialView.current.zoom
+      });
+    } catch {
+      setMapLoading(false);
+      setMapError("This browser could not start the interactive map. Try a current browser with graphics acceleration enabled. Case details and alerts remain available.");
+      return;
+    }
 
     map.addControl(new maplibregl.NavigationControl(), "top-right");
+    map.on("error", () => { setMapLoading(false); setMapError("Some map layers could not load. Check your connection; case details and alerts are still available."); });
+    map.once("idle", () => setMapLoading(false));
     instanceRef.current = map;
+    // Grid layout, sidebar changes and asynchronous styles can resize the map
+    // without a window resize. Keep the WebGL canvas and marker projection aligned.
+    const resizeObserver = new ResizeObserver(() => map.resize());
+    resizeObserver.observe(mapRef.current);
 
     return () => {
+      resizeObserver.disconnect();
       instanceRef.current?.remove();
       instanceRef.current = null;
     };
-  }, [center, zoom]);
+  }, []);
+
+  useEffect(() => {
+    instanceRef.current?.jumpTo({ center: [centerLongitude, centerLatitude], zoom });
+  }, [centerLongitude, centerLatitude, zoom]);
 
   useEffect(() => {
     const map = instanceRef.current;
@@ -66,14 +93,14 @@ export function MapView({
 
     const markerInstances: maplibregl.Marker[] = [];
     markers.forEach((marker) => {
-      const popup = marker.popup
-        ? new maplibregl.Popup({
+      const popup = new maplibregl.Popup({
             offset: 12,
             closeButton: false,
             closeOnClick: false,
             className: "cc-map-popup"
-          }).setHTML(marker.popup)
-        : undefined;
+          });
+      if (marker.popup) popup.setHTML(marker.popup);
+      else popup.setText(marker.label);
       const markerElement = document.createElement("div");
       markerElement.className = "flex flex-col items-center gap-2";
       markerElement.title = marker.label;
@@ -166,9 +193,34 @@ export function MapView({
 
     if (map.isStyleLoaded()) upsert();
     else map.once("load", upsert);
+    return () => { map.off("load", upsert); };
   }, [normalizedPolygons]);
 
-  return <div className={`aspect-square w-full overflow-hidden rounded-2xl border border-slate-800 ${className}`} ref={mapRef} />;
+  useEffect(() => {
+    const map = instanceRef.current;
+    if (!map) return;
+    const data = {
+      type: "FeatureCollection",
+      features: route.length > 1 ? [{
+        type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: route }
+      }] : []
+    };
+    const upsert = () => {
+      const source = map.getSource("screened-route") as GeoJSONSource | undefined;
+      if (source) { source.setData(data as never); return; }
+      map.addSource("screened-route", { type: "geojson", data: data as never });
+      map.addLayer({ id: "screened-route-line", type: "line", source: "screened-route", paint: { "line-color": "#38bdf8", "line-width": 5 } });
+    };
+    if (map.isStyleLoaded()) upsert();
+    else map.once("load", upsert);
+    return () => { map.off("load", upsert); };
+  }, [route]);
+
+  return <div className={`relative aspect-square w-full overflow-hidden rounded-2xl border border-slate-800 ${className}`}>
+    <div style={{ position: "absolute", inset: 0 }} ref={mapRef} />
+    {mapLoading ? <p className="absolute bottom-10 left-3 rounded-lg bg-slate-950/95 p-2 text-xs text-slate-200" role="status">Loading street map…</p> : null}
+    {mapError ? <p className="absolute bottom-10 left-3 right-3 rounded-lg border border-amber-700/50 bg-slate-950/95 p-2 text-xs text-amber-200" role="status">{mapError}</p> : null}
+  </div>;
 }
 
 export function markersFromPoints(points: { id: string; name: string; location?: string | null; color?: string }[]) {
@@ -182,7 +234,7 @@ export function markersFromPoints(points: { id: string; name: string; location?:
         longitude: parsed.longitude,
         latitude: parsed.latitude,
         color: point.color,
-        popup: `<div style="color:#f8fafc;font-weight:600;font-size:14px;line-height:1.3;">${point.name}</div>`
+        // MapView renders this label as text, so user supplied names cannot inject HTML.
       } satisfies MapMarker;
     })
     .filter(Boolean) as MapMarker[];
