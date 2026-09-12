@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getHazardSnapshot, hazardRequest } from "@/lib/hazards/client";
 import type { GeoPoint, HazardRole, HazardSnapshot } from "@/lib/hazards/types";
 
-export function useHazards(role: HazardRole, point?: GeoPoint | null) {
+export function useHazards(role: HazardRole, point?: GeoPoint | null, demoProfile?: string) {
   const [snapshot, setSnapshot] = useState<HazardSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -15,7 +15,7 @@ export function useHazards(role: HazardRole, point?: GeoPoint | null) {
   const refresh = useCallback(async () => {
     const request = ++latestRequest.current;
     try {
-      const data = await getHazardSnapshot(role, latitude !== undefined && longitude !== undefined ? { latitude, longitude } : undefined);
+      const data = await getHazardSnapshot(role, latitude !== undefined && longitude !== undefined ? { latitude, longitude } : undefined, demoProfile);
       if (!active.current || request !== latestRequest.current) return;
       setSnapshot(data);
       setError(null);
@@ -24,10 +24,12 @@ export function useHazards(role: HazardRole, point?: GeoPoint | null) {
     } finally {
       if (active.current && request === latestRequest.current) setLoading(false);
     }
-  }, [role, latitude, longitude]);
+  }, [role, latitude, longitude, demoProfile]);
 
   useEffect(() => {
     active.current = true;
+    setSnapshot(null);
+    setLoading(true);
     void refresh();
     const timer = window.setInterval(() => void refresh(), 10000);
     return () => { active.current = false; ++latestRequest.current; window.clearInterval(timer); };
@@ -37,7 +39,7 @@ export function useHazards(role: HazardRole, point?: GeoPoint | null) {
 
 export type RunHazardAction = (action: string, input: Record<string, unknown>, success: string) => Promise<boolean>;
 
-export function useHazardActions(role: HazardRole, refresh: () => Promise<void>) {
+export function useHazardActions(role: HazardRole, refresh: () => Promise<void>, demoProfile?: string) {
   const pending = useRef(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +49,7 @@ export function useHazardActions(role: HazardRole, refresh: () => Promise<void>)
     pending.current = true;
     setBusy(true); setError(null); setMessage(null);
     try {
-      await hazardRequest(action, input, role);
+      await hazardRequest(action, input, role, demoProfile);
       setMessage(success);
       await refresh();
       return true;

@@ -73,3 +73,9 @@ resource "aws_cognito_user_group" "government" {
   description  = "Government admins"
   precedence   = 0
 }
+
+resource "aws_cognito_user_group" "relief" {
+  name         = "relief"
+  user_pool_id = aws_cognito_user_pool.main.id
+  description  = "Relief coordinators"
+}

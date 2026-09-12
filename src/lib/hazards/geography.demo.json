@@ -1,0 +1,14 @@
+{
+  "type": "FeatureCollection",
+  "source": "Synthetic CodeArena geography for demonstration only; these are not actual administrative boundaries or roads",
+  "fixture": true,
+  "verified": false,
+  "roadMatchMaxDistanceM": 500,
+  "features": [
+    {"type":"Feature","properties":{"kind":"ward","id":"DEMO-WARD-WEST","name":"Demo West Ward","councilId":"DEMO-COUNCIL-A","councilName":"Demo Council A"},"geometry":{"type":"Polygon","coordinates":[[[79.84,6.92],[79.875,6.92],[79.875,6.98],[79.84,6.98],[79.84,6.92]]]}},
+    {"type":"Feature","properties":{"kind":"ward","id":"DEMO-WARD-EAST","name":"Demo East Ward","councilId":"DEMO-COUNCIL-A","councilName":"Demo Council A"},"geometry":{"type":"Polygon","coordinates":[[[79.875,6.92],[79.91,6.92],[79.91,6.95],[79.875,6.95],[79.875,6.92]]]}},
+    {"type":"Feature","properties":{"kind":"ward","id":"DEMO-WARD-NORTH","name":"Demo North Ward","councilId":"DEMO-COUNCIL-B","councilName":"Demo Council B"},"geometry":{"type":"Polygon","coordinates":[[[79.875,6.95],[79.91,6.95],[79.91,6.98],[79.875,6.98],[79.875,6.95]]]}},
+    {"type":"Feature","properties":{"kind":"road","id":"DEMO-ROAD-01","name":"Demo East-West Road"},"geometry":{"type":"LineString","coordinates":[[79.845,6.952],[79.88,6.952],[79.905,6.952]]}},
+    {"type":"Feature","properties":{"kind":"road","id":"DEMO-ROAD-02","name":"Demo North-South Road"},"geometry":{"type":"LineString","coordinates":[[79.87,6.925],[79.87,6.95],[79.87,6.975]]}}
+  ]
+}

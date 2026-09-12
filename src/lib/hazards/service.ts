@@ -4,8 +4,13 @@ import { caseRadius, distanceM, enforceVerdict, systemChecks, unavailableCheck, 
 import { fetchOsrmCandidates, routeIntersectsHazard, selectScreenedRoute, type RouteExclusion, type RouteProvider } from "./routing";
 import { normalizePolygonExclusions, pointAvoidsPolygons, routeAvoidsPolygons } from "./polygon-safety";
 import { createHazardStore, type HazardStore } from "./store";
+import { geographyCatalog, resolveGeography } from "./geography";
+import { attachRoutesToAlerts, recipientIdsForAlert } from "./alert-routing";
+import { assertCanReport, createCommunityOperations } from "./community";
+import { createAutomaticRelief } from "./auto-relief";
+import { caseForActor } from "./case-visibility";
 import { actorSchema, crewSchema, HazardError, notesSchema, parse, pointSchema, reliefSchema, reportSchema, routeCoordinatesSchema, validatePhoto, weatherSchema } from "./validation";
-import type { AreaAlert, GeoPoint, HazardActor, HazardCase, HazardEvidence, HazardReportInput, HazardSnapshot, HazardState, PhotoInput, PublicHazard, ReliefInput, RouteScreen, SafeRoute, WeatherInput, WeatherReading } from "./types";
+import type { AreaAlert, GeoPoint, HazardActor, HazardCase, HazardEvidence, HazardReportInput, HazardSnapshot, HazardState, PhotoInput, PublicHazard, PublicHazardSnapshot, ReliefInput, RouteScreen, SafeRoute, Urgency, WeatherInput, WeatherReading } from "./types";
 
 export * from "./types";
 export { HazardError } from "./validation";
@@ -20,7 +25,11 @@ function findCase(state: HazardState, id: string): HazardCase {
   if (!item) throw new HazardError("Hazard case not found.", 404, "NOT_FOUND");
   return item;
 }
+function syncCouncilTicket(item: HazardCase): void {
+  if (item.councilTicket) item.councilTicket.status = item.status === "resolved" || item.status === "rejected" ? "resolved" : "open";
+}
 function change(item: HazardCase, actorId: string, action: string, notes: string, now: number): void {
+  syncCouncilTicket(item);
   item.revision += 1;
   item.updatedAt = iso(now);
   item.history.push({ id: randomUUID(), at: iso(now), actorId, action, notes });
@@ -29,7 +38,9 @@ function photoEvidence(photo: Awaited<ReturnType<typeof validatePhoto>>, actor: 
   return { ...photo, id: randomUUID(), kind, notes, uploadedAt: iso(now), uploadedBy: actor.id };
 }
 function publicHazards(state: HazardState): PublicHazard[] {
-  return state.cases.filter(active).map(item => ({ id: item.id, kind: item.kind, title: `${item.source === "weather" && state.weather.find(reading => reading.id === item.weatherReadingId)?.source === "replay" ? "DEMO — " : ""}${item.kind.replaceAll("_", " ")} hazard`, location: item.location, radiusM: item.radiusM, status: item.status as "confirmed" | "assigned", updatedAt: item.updatedAt }));
+  return state.cases.filter(active).map(item => ({ id: item.id, kind: item.kind, title: `${item.source === "weather" && state.weather.find(reading => reading.id === item.weatherReadingId)?.source === "replay" ? "DEMO — " : ""}${item.kind.replaceAll("_", " ")} hazard`, location: item.location, radiusM: item.radiusM, status: item.status as "confirmed" | "assigned", updatedAt: item.updatedAt,
+    urgency: item.verdict.urgency ?? "unknown", ward: item.geography?.ward,
+    road: item.geography?.road ? { id: item.geography.road.id, name: item.geography.road.name, closed: item.geography.road.distanceM <= item.radiusM } : undefined }));
 }
 function alert(state: HazardState, item: HazardCase, kind: AreaAlert["kind"], now: number, withdrawn = false): void {
   if (kind !== "weather_warning") {
@@ -39,9 +50,9 @@ function alert(state: HazardState, item: HazardCase, kind: AreaAlert["kind"], no
   const prefix = demo ? "DEMO — " : "";
   const title = kind === "weather_warning" ? "Weather threshold warning" : kind === "hazard_confirmed" ? `${item.kind.replaceAll("_", " ")} confirmed` : withdrawn ? "Hazard notice withdrawn after review" : "Hazard cleared by response crew";
   const message = kind === "weather_warning"
-    ? "A recent weather observation exceeded a rainfall or river threshold in this area. This is an early warning; field verification is still required. Check the hazard map and request route screening before travelling."
+    ? "A recent weather observation exceeded a rainfall or river threshold in this area. This is an early warning; field verification is still required. Route guidance is prepared automatically for residents sharing their location."
     : kind === "hazard_confirmed"
-      ? "A hazard has been confirmed in this area. Avoid the marked buffer. Use the route planner to check a route to an available shelter; current road conditions still need local confirmation."
+      ? "A hazard has been confirmed in this area. Avoid the marked buffer. Your alert includes automatically screened route guidance when a current location is available; follow responder instructions if no route can be established."
       : withdrawn ? "Government review has withdrawn this hazard notice. The map has been updated. Other warnings and unreported hazards may still apply."
         : "The assigned response crew or government has submitted clearance photo evidence. This hazard has been removed from the active map. Other warnings and unreported hazards may still apply.";
   state.alerts.push({ id: randomUUID(), caseId: item.id, kind, title: `${prefix}${title}`, message: `${demo ? "SIMULATION ONLY. " : ""}${message}`, location: item.location, radiusM: Math.max(2000, item.radiusM), createdAt: iso(now), expiresAt: iso(now + (kind === "weather_warning" ? WEATHER_WINDOW_MS : 24 * 60 * 60_000)) });
@@ -67,6 +78,117 @@ export function createHazardService(options: { store: HazardStore; evaluate?: Ha
   const routeProvider = options.routeProvider ?? fetchOsrmCandidates;
   const clock = options.now ?? Date.now;
 
+  function enrich(item: HazardCase): HazardCase {
+    item.geography ??= resolveGeography(item.location, { demo: store.mode === "local-demo" });
+    item.verdict.urgency ??= "unknown";
+    if (!item.councilTicket && item.geography.council) item.councilTicket = {
+      id: `council-${item.id}`, councilId: item.geography.council.id, councilName: item.geography.council.name,
+      status: item.status === "resolved" || item.status === "rejected" ? "resolved" : "open",
+      assignedAt: item.createdAt, assignmentSource: "geography",
+    };
+    syncCouncilTicket(item);
+    return item;
+  }
+  function accessible(actor: HazardActor, item: HazardCase): boolean {
+    enrich(item);
+    return !["government", "relief"].includes(actor.role) || !actor.councilIds?.length || Boolean(item.councilTicket && actor.councilIds.includes(item.councilTicket.councilId));
+  }
+  function assertCaseAccess(actor: HazardActor, item: HazardCase) {
+    if (!accessible(actor, item)) throw new HazardError("This case belongs to another council. A cross-council administrator must reassign it.", 403, "COUNCIL_SCOPE");
+  }
+  const routingContext = (state: HazardState) => JSON.stringify({ hazards: publicHazards(state), warnings: state.alerts.filter(entry => entry.kind === "weather_warning" && Date.parse(entry.expiresAt) > clock()), shelters: state.shelters });
+
+  async function planRoute(location: GeoPoint): Promise<SafeRoute> {
+    const state = await store.read();
+    let legacy: { id: string; geometry: unknown }[];
+    try { legacy = await store.legacyHazards(); }
+    catch { legacy = [{ id: "unavailable", geometry: null }]; }
+    if (normalizePolygonExclusions(legacy.map(item => item.geometry)) === null) return {
+      status: "unavailable", reason: "An active disaster boundary is missing or unavailable. Route screening requires all active boundaries.", coordinates: [], screenedHazardIds: legacy.map(item => `legacy:${item.id}`), checkedAt: iso(clock()), limitations: ["Every active disaster needs a usable boundary."]
+    };
+    const result = await selectScreenedRoute(location, state.shelters, exclusions(state, clock()), clock(), routeProvider, coordinates => routeAvoidsPolygons(coordinates, legacy.map(item => item.geometry)));
+    result.screenedHazardIds.push(...legacy.map(item => `legacy:${item.id}`));
+    result.limitations.push("Active legacy disaster polygons are screened, including boundary touches.");
+    if (result.status !== "available" || !result.shelter) return { ...result, checkedAt: iso(clock()) };
+    const latest = await store.read(), now = clock(), current = exclusions(latest, now);
+    try { legacy = await store.legacyHazards(); } catch { legacy = [{ id: "unavailable", geometry: null }]; }
+    const shelter = latest.shelters.find(candidate => candidate.id === result.shelter!.id);
+    const screened: [number, number][] = [[location.longitude, location.latitude], ...result.coordinates, [result.shelter.location.longitude, result.shelter.location.latitude]];
+    if (!shelter || shelter.available <= 0 || distanceM(shelter.location, result.shelter.location) > 1 || current.some(hazard => routeIntersectsHazard(screened, hazard)) || !routeAvoidsPolygons(screened, legacy.map(item => item.geometry))) return {
+      status: "unavailable", reason: "Hazards or shelter availability changed while routing. This route was discarded.", coordinates: [], screenedHazardIds: current.map(hazard => hazard.id), checkedAt: iso(now), limitations: result.limitations
+    };
+    return { ...result, shelter, screenedHazardIds: [...current.map(hazard => hazard.id), ...legacy.map(item => `legacy:${item.id}`)], checkedAt: iso(now) };
+  }
+
+  let alertRouteCursor = 0;
+  function removeIneligibleDeliveries(state: HazardState, now: number): void {
+    state.deliveries = (state.deliveries ?? []).filter(delivery => {
+      const profile = state.residents?.find(entry => entry.id === delivery.recipientId);
+      const alert = state.alerts.find(entry => entry.id === delivery.alertId);
+      return !!profile && !!alert && alert.kind !== "hazard_resolved" &&
+        JSON.stringify(profile.location) === JSON.stringify(delivery.location) && recipientIdsForAlert(alert, [profile], now).length > 0;
+    });
+  }
+
+  async function dispatchAlerts(onlyRecipient?: string): Promise<void> {
+    // The primary report/review/location mutation is already committed. Route enrichment
+    // must never turn that success into an error or grow linearly with the audience size.
+    try {
+      const batch = await store.transaction(state => {
+        const now = clock(), contextKey = routingContext(state);
+        removeIneligibleDeliveries(state, now);
+        const targets = (state.residents ?? []).filter(profile => (!onlyRecipient || profile.id === onlyRecipient) && profile.location).flatMap(profile => {
+          const alerts = state.alerts.filter(entry => entry.kind !== "hazard_resolved" && recipientIdsForAlert(entry, [profile], now).length > 0);
+          return alerts.length ? [{ profile, alerts }] : [];
+        });
+        // Every eligible recipient gets honest durable guidance before any network work.
+        // A later snapshot always attempts a fresh screen, including deferred recipients.
+        for (const { profile, alerts } of targets) for (const entry of alerts) {
+          const route: SafeRoute = {
+            status: "unavailable", reason: "Automatic route preparation is pending. Open or refresh the map for a current route check; request responder assistance if you are in danger.",
+            coordinates: [], checkedAt: iso(now), screenedHazardIds: [],
+            limitations: ["No road route has been verified for this delivery yet. Do not treat the absence of a route as evidence that travel is safe."],
+          };
+          state.deliveries = state.deliveries!.filter(delivery => !(delivery.recipientId === profile.id && delivery.alertId === entry.id));
+          state.deliveries!.push({ recipientId: profile.id, alertId: entry.id, location: profile.location!, route, preparedAt: iso(now) });
+        }
+        return { targets, now, contextKey };
+      });
+      if (!batch.targets.length) return;
+      // One bounded wave, fully awaited. Rotate candidates so repeated broadcasts do not
+      // always prefer the first three residents. Provider/DB operations retain their timeouts.
+      const start = onlyRecipient ? 0 : alertRouteCursor % batch.targets.length;
+      const selected = Array.from({ length: Math.min(3, batch.targets.length) }, (_, index) => batch.targets[(start + index) % batch.targets.length]);
+      if (!onlyRecipient) alertRouteCursor = (start + selected.length) % batch.targets.length;
+      const prepared = await Promise.allSettled(selected.map(async target => ({
+        target,
+        alerts: await attachRoutesToAlerts({ alerts: target.alerts, origin: target.profile.location, planRoute, now: batch.now, clock, contextKey: batch.contextKey }),
+      })));
+      await store.transaction(current => {
+        const now = clock();
+        removeIneligibleDeliveries(current, now);
+        if (routingContext(current) !== batch.contextKey) return;
+        for (const result of prepared) {
+          if (result.status !== "fulfilled") continue;
+          const { target, alerts } = result.value;
+          const profile = current.residents?.find(entry => entry.id === target.profile.id);
+          if (!profile || profile.locationUpdatedAt !== target.profile.locationUpdatedAt || JSON.stringify(profile.location) !== JSON.stringify(target.profile.location)) continue;
+          for (const entry of alerts) {
+            const latest = current.alerts.find(alert => alert.id === entry.id);
+            if (!entry.route || !latest || !recipientIdsForAlert(latest, [profile], now).length) continue;
+            const routeAge = now - Date.parse(entry.route.checkedAt);
+            if (routeAge < 0 || routeAge > 30_000 || !Number.isFinite(routeAge)) continue;
+            current.deliveries = current.deliveries!.filter(delivery => !(delivery.recipientId === profile.id && delivery.alertId === entry.id));
+            current.deliveries!.push({ recipientId: profile.id, alertId: entry.id, location: profile.location!, route: entry.route, preparedAt: iso(now) });
+          }
+        }
+      });
+    } catch {
+      // Existing area-alert records remain durable. A fresh snapshot retries route planning;
+      // no deferred promise is left running after this best-effort dispatch returns.
+    }
+  }
+
   async function evaluateCase(id: string, revision: number): Promise<HazardCase> {
     const state = await store.read();
     const item = findCase(state, id);
@@ -78,7 +200,7 @@ export function createHazardService(options: { store: HazardStore; evaluate?: Ha
     catch {
       result = { checks: [...initialSystem, ...(["image", "location", "risk"] as const).map(check => unavailableCheck(check, "AI evaluation failed. The report remains saved for human review."))], verdict: { decision: "needs_verification", confidence: null, reason: "AI evaluation failed. Human review is required.", origin: "system" } };
     }
-    return store.transaction(current => {
+    const evaluated = await store.transaction(current => {
       const latest = findCase(current, id);
       // Never overwrite a human decision or newly submitted evidence while AI was running.
       if (latest.revision !== revision || latest.status !== "needs_verification") return latest;
@@ -97,31 +219,68 @@ export function createHazardService(options: { store: HazardStore; evaluate?: Ha
       if (latest.status === "confirmed") alert(current, latest, "hazard_confirmed", currentTime);
       return latest;
     });
+    if (active(evaluated)) await dispatchAlerts();
+    return evaluated;
   }
 
   return {
+    ...createCommunityOperations({ store, now: clock, evaluateCase, assertCaseAccess, onLocationChanged: dispatchAlerts }),
+    ...createAutomaticRelief({ store, now: clock, routeProvider, exclusions, assertCaseAccess }),
+
+    async publicSnapshot(): Promise<PublicHazardSnapshot> {
+      const state = await store.read(), now = clock();
+      state.cases.forEach(enrich);
+      return {
+        hazards: publicHazards(state), shelters: state.shelters, fixtureShelters: state.shelters.some(shelter => shelter.fixture), generatedAt: iso(now),
+        alerts: state.alerts.filter(entry => Date.parse(entry.expiresAt) > now).map(entry => ({
+          id: entry.id, caseId: entry.caseId, kind: entry.kind, title: entry.title, message: entry.message,
+          location: entry.location, radiusM: entry.radiusM, createdAt: entry.createdAt, expiresAt: entry.expiresAt,
+        })),
+      };
+    },
     async snapshot(actorInput: HazardActor, point?: GeoPoint): Promise<HazardSnapshot> {
       const actor = parse(actorSchema, actorInput);
-      const location = point === undefined ? undefined : parse(pointSchema, point);
       const state = await store.read();
       const now = clock();
+      state.cases.forEach(enrich);
+      const resident = state.residents?.find(entry => entry.id === actor.id);
+      const storedLocation = resident?.alertsEnabled && resident.locationUpdatedAt && now - Date.parse(resident.locationUpdatedAt) <= 24 * 60 * 60_000 ? resident.location : undefined;
+      const location = point === undefined ? storedLocation : parse(pointSchema, point);
       const own = new Set(state.cases.filter(item => item.reportedBy === actor.id).map(item => item.id));
       let cases = state.cases;
       if (actor.role === "citizen") cases = cases.filter(item => own.has(item.id));
+      if (actor.role === "government") cases = cases.filter(item => accessible(actor, item));
+      if (actor.role === "relief") cases = cases.filter(item => item.helpRequested && accessible(actor, item)).map(item => caseForActor(item, actor));
       if (actor.role === "ngo") cases = cases.filter(item => own.has(item.id) || item.assignedCrew?.id === actor.id || active(item)).map(item => {
         if (own.has(item.id) || item.assignedCrew?.id === actor.id) return item;
         return { ...item, title: `${item.kind.replaceAll("_", " ")} hazard`, description: "Confirmed hazard. Claim the assignment to access the report evidence and response details.", reportedBy: "redacted", assignedCrew: undefined, needs: item.helpRequested ? "Assistance requested; details available to the assigned crew." : "", checks: [], evidence: [], history: [], relief: undefined, informationRequest: undefined, verdict: { ...item.verdict, reason: "Hazard confirmed. Detailed evidence is restricted to the assigned crew and government reviewers." } };
       });
       const alerts = state.alerts.filter(entry => Date.parse(entry.expiresAt) > now && (actor.role !== "citizen" && !location || own.has(entry.caseId) || location && distanceM(location, entry.location) <= entry.radiusM));
-      return { cases: cases.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)), hazards: publicHazards(state), alerts: alerts.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)), weather: state.weather.slice(-50).reverse(), shelters: state.shelters, thresholds: state.thresholds, storageMode: store.mode, fixtureShelters: state.shelters.some(shelter => shelter.fixture), generatedAt: iso(now) };
+      const routedAlerts = actor.role === "citizen" ? await attachRoutesToAlerts({ alerts, origin: location, planRoute, now, clock, contextKey: routingContext(state) }) : alerts;
+      const priority = { critical: 4, high: 3, moderate: 2, low: 1, unknown: 0 };
+      const bans = actor.role === "government" ? (state.bans ?? []).filter(ban => cases.some(item => item.id === ban.caseId)) : undefined;
+      const reporters = actor.role === "government" ? [...new Set(cases.filter(item => item.source === "citizen").map(item => item.reportedBy))].map(id => {
+        const reports = cases.filter(item => item.reportedBy === id), ban = (state.bans ?? []).find(entry => entry.reporterId === id && !entry.liftedAt);
+        return { id, reports: reports.length, rejected: reports.filter(item => item.verdict.origin === "human" && item.status === "rejected").length, banned: Boolean(ban), reason: ban && cases.some(item => item.id === ban.caseId) ? ban.reason : undefined };
+      }) : undefined;
+      return {
+        cases: cases.sort((a, b) => priority[b.verdict.urgency ?? "unknown"] - priority[a.verdict.urgency ?? "unknown"] || Date.parse(b.updatedAt) - Date.parse(a.updatedAt)),
+        hazards: publicHazards(state), alerts: routedAlerts.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
+        weather: state.weather.slice(-50).reverse(), shelters: state.shelters, thresholds: state.thresholds,
+        storageMode: store.mode, fixtureShelters: state.shelters.some(shelter => shelter.fixture), generatedAt: iso(clock()),
+        actor, resident, bans, reporters, ...geographyCatalog({ demo: store.mode === "local-demo" }),
+        invitations: (state.invitations ?? []).filter(entry => entry.recipientId === actor.id && (entry.status === "responded" || entry.status === "pending" && Date.parse(entry.expiresAt) > now)),
+      };
     },
 
     async submitReport(actorInput: HazardActor, input: HazardReportInput): Promise<HazardCase> {
       const actor = parse(actorSchema, actorInput), report = parse(reportSchema, input);
-      const photo = await validatePhoto(report.photo);
+      assertCanReport(await store.read(), actor);
+      const photo = await validatePhoto(report.photo, report.location);
       if (report.helpRequested && report.needs.trim().length < 3) throw new HazardError("Describe the assistance you need.");
       const now = clock();
       const created = await store.transaction(state => {
+        assertCanReport(state, actor);
         const item: HazardCase = {
           id: randomUUID(), revision: 1, source: "citizen", kind: report.kind, title: report.title, description: report.description, location: report.location, radiusM: caseRadius(report.kind),
           status: "needs_verification", reportedBy: actor.id, createdAt: iso(now), updatedAt: iso(now),
@@ -129,6 +288,7 @@ export function createHazardService(options: { store: HazardStore; evaluate?: Ha
           evidence: [photoEvidence(photo, actor, "report", "Original citizen report", now)], history: [{ id: randomUUID(), at: iso(now), actorId: actor.id, action: "report_submitted", notes: "Photo and GPS report saved for verification." }],
           helpRequested: report.helpRequested, needs: report.needs,
         };
+        enrich(item);
         state.cases.push(item);
         item.checks = systemChecks(item, state, now);
         return item;
@@ -142,6 +302,10 @@ export function createHazardService(options: { store: HazardStore; evaluate?: Ha
       if (source !== "operator" && source !== "replay") throw new HazardError("Invalid weather source.");
       if (source === "replay" && process.env.NODE_ENV === "production" && process.env.HAZARD_DEMO_MODE !== "true") throw new HazardError("Weather replay requires explicit HAZARD_DEMO_MODE. Simulated warnings cannot be injected into a live deployment.", 403, "DEMO_DISABLED");
       const weather = parse(weatherSchema, input);
+      if (actor.councilIds?.length) {
+        const geography = resolveGeography(weather.location, { demo: store.mode === "local-demo" });
+        if (!geography.council || !actor.councilIds.includes(geography.council.id)) throw new HazardError("This observation is outside your council jurisdiction.", 403, "COUNCIL_SCOPE");
+      }
       const now = clock(), observed = Date.parse(weather.observedAt);
       if (observed > now + 5 * 60_000 || observed < now - 24 * 60 * 60_000) throw new HazardError("Weather observations must be within the last 24 hours and no more than 5 minutes in the future.");
       // Normalize equivalent timestamps so differing UTC offsets cannot evade idempotency.
@@ -165,6 +329,7 @@ export function createHazardService(options: { store: HazardStore; evaluate?: Ha
             checks: [], verdict: { decision: "needs_verification", confidence: null, reason: "Weather exceeded a threshold; field verification is pending.", origin: "system" }, evidence: [],
             history: [{ id: randomUUID(), at: iso(now), actorId: actor.id, action: "weather_warning_created", notes: `Source: ${source}; weather reading ${reading.id}.` }], helpRequested: false, needs: "", weatherReadingId: reading.id,
           };
+          enrich(item);
           state.cases.push(item);
         } else {
           item.weatherReadingId = reading.id;
@@ -178,22 +343,27 @@ export function createHazardService(options: { store: HazardStore; evaluate?: Ha
         else { alert(state, item, "weather_warning", now); state.alerts[state.alerts.length - 1].expiresAt = iso(observed + WEATHER_WINDOW_MS); }
         return { reading, case: item, evaluate: item.status === "needs_verification" };
       });
+      if (result.case) await dispatchAlerts();
       return { reading: result.reading, case: result.evaluate && result.case ? await evaluateCase(result.case.id, result.case.revision) : result.case };
     },
 
-    async reviewCase(actorInput: HazardActor, id: string, decision: "confirmed" | "rejected", notesInput: string): Promise<HazardCase> {
+    async reviewCase(actorInput: HazardActor, id: string, decision: "confirmed" | "rejected", notesInput: string, urgency?: Urgency): Promise<HazardCase> {
       const actor = parse(actorSchema, actorInput), notes = parse(notesSchema, notesInput);
       assertRole(actor, "government");
       if (decision !== "confirmed" && decision !== "rejected") throw new HazardError("Review decision must be confirmed or rejected.");
-      return store.transaction(state => {
+      if (urgency !== undefined && !["low", "moderate", "high", "critical", "unknown"].includes(urgency)) throw new HazardError("Invalid urgency level.");
+      const reviewed = await store.transaction(state => {
         const item = findCase(state, id), now = clock();
+        assertCaseAccess(actor, item);
         if (item.status === "resolved") throw new HazardError("Resolved hazards cannot be reopened by review. Submit a new report for a new event.", 409, "INVALID_TRANSITION");
         if (item.status === decision || decision === "confirmed" && item.status === "assigned") throw new HazardError("This review decision is already recorded.", 409, "ALREADY_REVIEWED");
         const wasActive = active(item), previousDecision = item.verdict.decision;
         // A label is recorded once per review, with its previous machine/human decision for audit.
         state.feedback.push({ caseId: item.id, at: iso(now), actorId: actor.id, decision, previousDecision, notes });
         item.status = decision;
-        item.verdict = { decision, confidence: null, reason: notes, origin: "human" };
+        item.verdict = { decision, confidence: null, reason: notes, origin: "human", urgency: urgency ?? item.verdict.urgency ?? "unknown" };
+        if (item.councilTicket) item.councilTicket.status = decision === "rejected" ? "resolved" : "open";
+        for (const invitation of state.invitations ?? []) if (invitation.caseId === id && invitation.status === "pending") invitation.status = "cancelled";
         item.informationRequest = undefined;
         if (decision === "rejected") {
           item.assignedCrew = undefined;
@@ -205,6 +375,24 @@ export function createHazardService(options: { store: HazardStore; evaluate?: Ha
         change(item, actor.id, `human_${decision}`, notes, now);
         return item;
       });
+      if (active(reviewed)) await dispatchAlerts();
+      return reviewed;
+    },
+
+    async assignCouncil(actorInput: HazardActor, id: string, input: { councilId: string; councilName?: string; notes: string }): Promise<HazardCase> {
+      const actor = parse(actorSchema, actorInput), notes = parse(notesSchema, input.notes);
+      assertRole(actor, "government");
+      const council = geographyCatalog({ demo: store.mode === "local-demo" }).councils.find(candidate => candidate.id === input.councilId);
+      if (!council) throw new HazardError("Choose a council from the configured geography catalog.");
+      if (actor.councilIds?.length && !actor.councilIds.includes(council.id)) throw new HazardError("Only a cross-council administrator can transfer work outside your jurisdiction.", 403, "COUNCIL_SCOPE");
+      return store.transaction(state => {
+        const item = findCase(state, id), now = clock();
+        assertCaseAccess(actor, item);
+        if (item.status === "resolved" || item.status === "rejected") throw new HazardError("Only open council tickets can be reassigned.", 409, "INVALID_TRANSITION");
+        item.councilTicket = { id: `council-${item.id}`, councilId: council.id, councilName: council.name, status: "open", assignedAt: iso(now), assignmentSource: "officer" };
+        change(item, actor.id, "council_assigned", `${council.name}: ${notes}`, now);
+        return item;
+      });
     },
 
     async requestEvidence(actorInput: HazardActor, id: string, notesInput: string): Promise<HazardCase> {
@@ -212,19 +400,25 @@ export function createHazardService(options: { store: HazardStore; evaluate?: Ha
       assertRole(actor, "government");
       return store.transaction(state => {
         const item = findCase(state, id), now = clock();
+        assertCaseAccess(actor, item);
         if (active(item) || item.status === "resolved") throw new HazardError("Request more information on pending or rejected cases. Active hazards remain published until an explicit rejection or photo clearance.", 409, "INVALID_TRANSITION");
         item.status = "needs_verification";
         item.informationRequest = { notes, requestedAt: iso(now), requestedBy: actor.id };
-        item.verdict = { decision: "needs_verification", confidence: null, reason: `Reviewer requested more evidence: ${notes}`, origin: "human" };
+        item.verdict = { decision: "needs_verification", confidence: null, reason: `Reviewer requested more evidence: ${notes}`, origin: "human", urgency: item.verdict.urgency ?? "unknown" };
         change(item, actor.id, "evidence_requested", notes, now);
         return item;
       });
     },
 
     async addEvidence(actorInput: HazardActor, id: string, photoInput: PhotoInput, notesInput: string): Promise<HazardCase> {
-      const actor = parse(actorSchema, actorInput), notes = parse(notesSchema, notesInput), photo = await validatePhoto(photoInput);
+      const actor = parse(actorSchema, actorInput), notes = parse(notesSchema, notesInput);
+      const before = await store.read();
+      assertCanReport(before, actor);
+      const photo = await validatePhoto(photoInput, findCase(before, id).location);
       const item = await store.transaction(state => {
         const current = findCase(state, id), now = clock();
+        assertCanReport(state, actor);
+        assertCaseAccess(actor, current);
         if (actor.role !== "government" && current.reportedBy !== actor.id && !(actor.role === "ngo" && current.assignedCrew?.id === actor.id)) throw new HazardError("You can add evidence only to your own report or assigned response.", 403, "FORBIDDEN");
         if (current.status === "resolved") throw new HazardError("This case is resolved. Submit a new report for a new hazard.", 409, "INVALID_TRANSITION");
         if (current.evidence.length >= 20) throw new HazardError("A case can contain at most 20 photos.", 409, "EVIDENCE_LIMIT");
@@ -246,6 +440,7 @@ export function createHazardService(options: { store: HazardStore; evaluate?: Ha
       if (actor.role === "ngo" && crew.id !== actor.id) throw new HazardError("NGOs can claim assignments only for their own authenticated account.", 403, "FORBIDDEN");
       return store.transaction(state => {
         const item = findCase(state, id), now = clock();
+        assertCaseAccess(actor, item);
         if (!active(item)) throw new HazardError("Only a confirmed hazard can be assigned to a response crew.", 409, "INVALID_TRANSITION");
         if (actor.role === "ngo" && item.assignedCrew && item.assignedCrew.id !== actor.id) throw new HazardError("Another crew already owns this response. Government can reassign it.", 409, "ALREADY_ASSIGNED");
         item.assignedCrew = { ...crew, assignedAt: iso(now) };
@@ -256,15 +451,20 @@ export function createHazardService(options: { store: HazardStore; evaluate?: Ha
     },
 
     async closeCase(actorInput: HazardActor, id: string, photoInput: PhotoInput, notesInput: string): Promise<HazardCase> {
-      const actor = parse(actorSchema, actorInput), notes = parse(notesSchema, notesInput), photo = await validatePhoto(photoInput);
+      const actor = parse(actorSchema, actorInput), notes = parse(notesSchema, notesInput);
       assertRole(actor, "government", "ngo");
+      const photo = await validatePhoto(photoInput, findCase(await store.read(), id).location);
+      if (photo.metadata.status === "gps_mismatch") throw new HazardError("Clearance photo GPS conflicts with the hazard location. Submit evidence from the response site.");
       return store.transaction(state => {
         const item = findCase(state, id), now = clock();
+        assertCaseAccess(actor, item);
         if (item.status !== "assigned" || !item.assignedCrew) throw new HazardError("Assign a confirmed hazard to a response crew before submitting clearance.", 409, "INVALID_TRANSITION");
         if (actor.role === "ngo" && item.assignedCrew.id !== actor.id) throw new HazardError("Only the assigned crew or government can clear this hazard.", 403, "FORBIDDEN");
         if (item.evidence.some(evidence => evidence.dataUrl === photo.dataUrl)) throw new HazardError("Clearance needs a new photo, not a copy of an existing case photo.");
         item.evidence.push(photoEvidence(photo, actor, "closure", notes, now));
         item.status = "resolved";
+        if (item.councilTicket) item.councilTicket.status = "resolved";
+        for (const invitation of state.invitations ?? []) if (invitation.caseId === id && invitation.status === "pending") invitation.status = "cancelled";
         change(item, actor.id, "hazard_cleared", notes, now);
         alert(state, item, "hazard_resolved", now);
         return item;
@@ -273,7 +473,7 @@ export function createHazardService(options: { store: HazardStore; evaluate?: Ha
 
     async assignRelief(actorInput: HazardActor, id: string, reliefInput: ReliefInput): Promise<HazardCase> {
       const actor = parse(actorSchema, actorInput), relief = parse(reliefSchema, reliefInput);
-      assertRole(actor, "government", "ngo");
+      assertRole(actor, "government", "ngo", "relief");
       let legacy: { id: string; geometry: unknown }[] = [];
       if (relief.shelterId) {
         try { legacy = await store.legacyHazards(); }
@@ -281,6 +481,7 @@ export function createHazardService(options: { store: HazardStore; evaluate?: Ha
       }
       return store.transaction(state => {
         const item = findCase(state, id), now = clock();
+        assertCaseAccess(actor, item);
         if (actor.role === "ngo" && item.assignedCrew?.id !== actor.id) throw new HazardError("NGOs can allocate relief only to their assigned cases.", 403, "FORBIDDEN");
         if (item.status === "resolved" || item.status === "rejected") throw new HazardError("Relief can be allocated only to open cases.", 409, "INVALID_TRANSITION");
         if (!item.helpRequested) throw new HazardError("This case has no assistance request.", 409, "NO_HELP_REQUEST");
@@ -295,21 +496,22 @@ export function createHazardService(options: { store: HazardStore; evaluate?: Ha
         }
         item.relief = { ...relief, assignedBy: actor.id, assignedAt: iso(now) };
         change(item, actor.id, "relief_allocated", `${relief.organization}: ${relief.resources}${relief.shelterId ? `; ${relief.people} shelter place(s) at ${relief.shelterId}` : ""}`, now);
-        return item;
+        return caseForActor(item, actor);
       });
     },
 
     async releaseRelief(actorInput: HazardActor, id: string, notesInput: string): Promise<HazardCase> {
       const actor = parse(actorSchema, actorInput), notes = parse(notesSchema, notesInput);
-      assertRole(actor, "government", "ngo");
+      assertRole(actor, "government", "ngo", "relief");
       return store.transaction(state => {
         const item = findCase(state, id), now = clock();
+        assertCaseAccess(actor, item);
         if (actor.role === "ngo" && item.assignedCrew?.id !== actor.id) throw new HazardError("Only the assigned crew or government can release this reservation.", 403, "FORBIDDEN");
         if (!item.relief?.shelterId) throw new HazardError("This case has no shelter reservation.", 409, "NO_RESERVATION");
         restoreShelter(state, item);
-        item.relief = { ...item.relief, shelterId: undefined, people: undefined };
+        item.relief = { ...item.relief, shelterId: undefined, people: undefined, route: undefined };
         change(item, actor.id, "shelter_released", notes, now);
-        return item;
+        return caseForActor(item, actor);
       });
     },
 
@@ -327,29 +529,7 @@ export function createHazardService(options: { store: HazardStore; evaluate?: Ha
 
     async planSafeRoute(actorInput: HazardActor, point: GeoPoint): Promise<SafeRoute> {
       parse(actorSchema, actorInput);
-      const location = parse(pointSchema, point);
-      const state = await store.read();
-      let legacy: { id: string; geometry: unknown }[];
-      try { legacy = await store.legacyHazards(); }
-      catch {
-        return { status: "unavailable", reason: "Active hazard boundaries from the existing disaster map could not be loaded. Routing is unavailable until every map hazard can be screened.", coordinates: [], screenedHazardIds: [], checkedAt: iso(clock()), limitations: ["The legacy disaster boundaries are required to check this route."] };
-      }
-      if (normalizePolygonExclusions(legacy.map(item => item.geometry)) === null) {
-        return { status: "unavailable", reason: "An active disaster on the existing map has a missing or invalid boundary. Routing is unavailable until that boundary is repaired.", coordinates: [], screenedHazardIds: legacy.map(item => `legacy:${item.id}`), checkedAt: iso(clock()), limitations: ["Every active disaster needs a usable boundary before a route can be screened."] };
-      }
-      const result = await selectScreenedRoute(location, state.shelters, exclusions(state, clock()), clock(), routeProvider, coordinates => routeAvoidsPolygons(coordinates, legacy.map(item => item.geometry)));
-      result.screenedHazardIds.push(...legacy.map(item => `legacy:${item.id}`));
-      result.limitations.push("Active and monitoring polygons from the existing disaster map are also screened; touching their boundaries is blocked.");
-      if (result.status !== "available" || !result.shelter) return result;
-      // Re-screen after the network call so concurrent confirmations/capacity changes are respected.
-      const latest = await store.read(), now = clock(), currentExclusions = exclusions(latest, now);
-      try { legacy = await store.legacyHazards(); } catch { legacy = [{ id: "unavailable", geometry: null }]; }
-      const shelter = latest.shelters.find(candidate => candidate.id === result.shelter!.id);
-      const screened: [number, number][] = [[location.longitude, location.latitude], ...result.coordinates, [result.shelter.location.longitude, result.shelter.location.latitude]];
-      if (!shelter || shelter.available <= 0 || distanceM(shelter.location, result.shelter.location) > 1 || currentExclusions.some(hazard => routeIntersectsHazard(screened, hazard)) || !routeAvoidsPolygons(screened, legacy.map(item => item.geometry))) {
-        return { status: "unavailable", reason: "Hazards or shelter availability changed while routing. This route was discarded; request a new route.", coordinates: [], screenedHazardIds: currentExclusions.map(hazard => hazard.id), checkedAt: iso(now), limitations: result.limitations };
-      }
-      return { ...result, shelter, screenedHazardIds: [...currentExclusions.map(hazard => hazard.id), ...legacy.map(item => `legacy:${item.id}`)], checkedAt: iso(now) };
+      return planRoute(parse(pointSchema, point));
     },
   };
 }
@@ -372,3 +552,12 @@ export const assignRelief = async (...args: Parameters<HazardService["assignReli
 export const releaseRelief = async (...args: Parameters<HazardService["releaseRelief"]>) => (await service()).releaseRelief(...args);
 export const screenRoute = async (...args: Parameters<HazardService["screenRoute"]>) => (await service()).screenRoute(...args);
 export const planSafeRoute = async (...args: Parameters<HazardService["planSafeRoute"]>) => (await service()).planSafeRoute(...args);
+export const publicSnapshot = async () => (await service()).publicSnapshot();
+export const updateLocation = async (...args: Parameters<HazardService["updateLocation"]>) => (await service()).updateLocation(...args);
+export const forgetLocation = async (...args: Parameters<HazardService["forgetLocation"]>) => (await service()).forgetLocation(...args);
+export const requestCommunity = async (...args: Parameters<HazardService["requestCommunity"]>) => (await service()).requestCommunity(...args);
+export const confirmCommunity = async (...args: Parameters<HazardService["confirmCommunity"]>) => (await service()).confirmCommunity(...args);
+export const banReporter = async (...args: Parameters<HazardService["banReporter"]>) => (await service()).banReporter(...args);
+export const unbanReporter = async (...args: Parameters<HazardService["unbanReporter"]>) => (await service()).unbanReporter(...args);
+export const assignCouncil = async (...args: Parameters<HazardService["assignCouncil"]>) => (await service()).assignCouncil(...args);
+export const autoRelief = async (...args: Parameters<HazardService["autoRelief"]>) => (await service()).autoRelief(...args);

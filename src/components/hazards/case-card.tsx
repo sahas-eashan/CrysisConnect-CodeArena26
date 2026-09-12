@@ -8,6 +8,7 @@ import { toTitleCase } from "@/lib/utils";
 import { PhotoField } from "./photo-field";
 import { fieldClass } from "./report-form";
 import type { RunHazardAction } from "./use-hazards";
+import { ReliefActions } from "./relief-actions";
 
 export function CaseCard({ item, role, snapshot, run, busy }: { item: HazardCase; role: HazardRole; snapshot: HazardSnapshot; run: RunHazardAction; busy: boolean }) {
   const terminal = item.status === "resolved";
@@ -19,6 +20,12 @@ export function CaseCard({ item, role, snapshot, run, busy }: { item: HazardCase
     </div>
     <p className="whitespace-pre-wrap break-words text-sm text-slate-300">{item.description}</p>
     <p className="break-words text-xs text-muted">GPS: {item.location.latitude.toFixed(5)}, {item.location.longitude.toFixed(5)} · Case {item.id}</p>
+    <div className="flex flex-wrap gap-2 text-xs"><span className={`rounded-full border px-3 py-1 ${["high", "critical"].includes(item.verdict.urgency ?? "") ? "border-red-700 text-red-200" : "border-slate-700 text-slate-200"}`}>Urgency: {toTitleCase(item.verdict.urgency ?? "unknown")}</span>
+      {item.geography?.ward ? <span className="rounded-full border border-slate-700 px-3 py-1">Ward: {item.geography.ward.name}</span> : null}
+      {item.geography?.road ? <span className="rounded-full border border-slate-700 px-3 py-1">Road: {item.geography.road.name} ({Math.round(item.geography.road.distanceM)} m away)</span> : null}
+    </div>
+    {item.geography ? <p className="text-xs text-muted">{item.geography.reason}{item.geography.fixture ? " Demonstration boundaries." : ""}</p> : null}
+    {item.councilTicket ? <p className="text-sm text-sky-200">Responsible council: {item.councilTicket.councilName} · Ticket {item.councilTicket.id} ({item.councilTicket.status}) · Assigned {item.councilTicket.assignmentSource === "geography" ? "from mapped ward" : "by an officer"}</p> : <p className="text-xs text-amber-200">Responsible council has not been assigned.</p>}
     <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-3">
       <p className="text-sm font-medium">Verdict: {toTitleCase(item.verdict.decision)} · {item.verdict.origin === "ai" ? "AI aggregator" : item.verdict.origin === "human" ? "Human reviewer" : "System fallback"}</p>
       <p className="mt-1 text-sm text-muted">{item.verdict.reason}</p>
@@ -35,6 +42,7 @@ export function CaseCard({ item, role, snapshot, run, busy }: { item: HazardCase
       <div className="mt-4 grid grid-cols-2 gap-3">{item.evidence.map((evidence) => <figure key={evidence.id}>
         <img className="h-32 w-full rounded-lg object-cover" src={evidence.dataUrl} alt={`${toTitleCase(evidence.kind)} evidence for ${item.title}`} loading="lazy" />
         <figcaption className="mt-1 text-xs text-muted">{toTitleCase(evidence.kind)} · {new Date(evidence.uploadedAt).toLocaleString()}{evidence.notes ? ` · ${evidence.notes}` : ""}</figcaption>
+        {evidence.metadata ? <div className={`mt-2 rounded-lg border p-2 text-xs ${evidence.metadata.status === "gps_mismatch" ? "border-amber-700 text-amber-200" : "border-slate-700 text-muted"}`}><p className="font-medium">Photo location: {toTitleCase(evidence.metadata.status)}</p><p className="mt-1">{evidence.metadata.reason}</p>{evidence.metadata.gps ? <p className="mt-1">Embedded GPS: {evidence.metadata.gps.latitude.toFixed(5)}, {evidence.metadata.gps.longitude.toFixed(5)}</p> : null}{evidence.metadata.capturedAt || evidence.metadata.capturedAtRaw ? <p className="mt-1">Embedded capture time: {evidence.metadata.capturedAt ?? evidence.metadata.capturedAtRaw}</p> : null}<p className="mt-1">Photo metadata can be edited and is supporting evidence only.</p></div> : null}
       </figure>)}</div>
     </details>
     {item.checks.some((check) => check.engine === "AI" && check.status === "unavailable") ? <p className="text-xs text-amber-300">Some AI checks are unavailable. Review the available evidence and system checks; an unavailable check does not confirm a hazard.</p> : null}
@@ -51,7 +59,8 @@ export function CaseCard({ item, role, snapshot, run, busy }: { item: HazardCase
     {!terminal && role === "government" ? <GovernmentActions item={item} snapshot={snapshot} run={run} busy={busy} /> : null}
     {!terminal && role === "citizen" ? <EvidenceAction item={item} run={run} busy={busy} closure={false} /> : null}
     {!terminal && role === "ngo" && item.status === "assigned" ? <EvidenceAction item={item} run={run} busy={busy} closure /> : null}
-    {item.relief?.shelterId && (role === "government" || role === "ngo") ? <ReleaseShelter item={item} run={run} busy={busy} /> : null}
+    {!terminal && role === "relief" && ["confirmed", "assigned"].includes(item.status) && item.helpRequested ? <ReliefActions item={item} snapshot={snapshot} run={run} busy={busy} /> : null}
+    {item.relief?.shelterId && (role === "government" || role === "ngo" || role === "relief") ? <ReleaseShelter item={item} run={run} busy={busy} /> : null}
   </article>;
 }
 
@@ -86,18 +95,33 @@ function EvidenceAction({ item, run, busy, closure }: { item: HazardCase; run: R
 
 function GovernmentActions({ item, snapshot, run, busy }: { item: HazardCase; snapshot: HazardSnapshot; run: RunHazardAction; busy: boolean }) {
   const [notes, setNotes] = useState("");
+  const [urgency, setUrgency] = useState(item.verdict.urgency ?? "unknown");
+  const councils = snapshot.councils ?? [];
   const reviewable = item.status === "needs_verification" || item.status === "confirmed" || item.status === "rejected";
   const dispatchable = item.status === "confirmed" || item.status === "assigned";
-  const [shelterId, setShelterId] = useState("");
   return <div className="space-y-4 border-t border-slate-700 pt-4">
     {reviewable ? <div className="space-y-3">
       <label className="block space-y-2 text-sm">Reviewer note<textarea className={fieldClass} rows={2} value={notes} onChange={(event) => setNotes(event.target.value)} minLength={5} maxLength={1500} placeholder="Describe the evidence supporting your decision" /></label>
+      <label className="block space-y-2 text-sm">Reviewer urgency<select className={fieldClass} value={urgency} onChange={(event) => setUrgency(event.target.value as typeof urgency)} disabled={busy}><option value="unknown">Unknown — needs assessment</option><option value="low">Low</option><option value="moderate">Moderate</option><option value="high">High</option><option value="critical">Critical</option></select></label>
       <div className="flex flex-wrap gap-2">
-        <Button disabled={busy || notes.trim().length < 5} variant="success" onClick={() => void run("review", { id: item.id, decision: "confirmed", notes }, "Hazard confirmed. An area warning is now visible to residents.")}>Confirm hazard</Button>
-        <Button disabled={busy || notes.trim().length < 5} variant="danger" onClick={() => void run("review", { id: item.id, decision: "rejected", notes }, "Case rejected with a recorded reason.")}>Reject report</Button>
+        <Button disabled={busy || notes.trim().length < 5} variant="success" onClick={() => void run("review", { id: item.id, decision: "confirmed", notes, urgency }, "Hazard confirmed. An area warning is now visible to residents.")}>Confirm hazard</Button>
+        <Button disabled={busy || notes.trim().length < 5} variant="danger" onClick={() => void run("review", { id: item.id, decision: "rejected", notes, urgency }, "Case rejected with a recorded reason.")}>Reject report</Button>
         {item.status === "needs_verification" || item.status === "rejected" ? <Button disabled={busy || notes.trim().length < 5} variant="outline" onClick={() => void run("requestEvidence", { id: item.id, notes }, "Request for more evidence sent to the reporting citizen.")}>Request more information</Button> : null}
+        <Button disabled={busy || notes.trim().length < 5} variant="outline" onClick={() => void run("requestCommunity", { id: item.id, notes }, "Verification invitations sent to eligible nearby residents.")}>Ask nearby residents to verify</Button>
       </div>
     </div> : null}
+    <details className="rounded-xl border border-slate-700 p-3"><summary className="cursor-pointer text-sm font-medium">Assign responsible council</summary>
+      <form className="mt-3 space-y-3" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); const selected = councils.find((council) => council.id === form.get("councilId")); if (selected) void run("assignCouncil", { id: item.id, councilId: selected.id, councilName: selected.name, notes: String(form.get("notes") ?? "").trim() }, "Responsible council updated and the assignment recorded."); }}>
+        <label className="block space-y-2 text-sm">Responsible council<select className={fieldClass} name="councilId" required defaultValue={item.councilTicket?.councilId ?? ""} disabled={busy}><option value="">Select a council</option>{councils.map((council) => <option key={council.id} value={council.id}>{council.name}</option>)}</select></label>
+        <label className="block space-y-2 text-sm">Council assignment reason<textarea className={fieldClass} name="notes" rows={2} minLength={5} maxLength={1500} required disabled={busy} /></label><Button disabled={busy || !councils.length} type="submit" variant="outline">Save council assignment</Button>
+        {!councils.length ? <p className="text-xs text-amber-200">No council directory is configured for this server.</p> : null}
+      </form>
+    </details>
+    {item.status === "rejected" && item.source === "citizen" && !snapshot.reporters?.find((reporter) => reporter.id === item.reportedBy)?.banned ? <details className="rounded-xl border border-red-900/60 p-3"><summary className="cursor-pointer text-sm font-medium">Restrict false reporting</summary><p className="mt-3 text-sm text-muted">A rejected report alone may be a mistake. Record why this reporter's conduct warrants a reporting restriction.</p>
+      <form className="mt-3 space-y-3" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void run("banReporter", { reporterId: item.reportedBy, caseId: item.id, reason: String(form.get("reason") ?? "").trim() }, "Reporting restricted with a recorded reason. Existing reports remain available for review."); }}>
+        <label className="block space-y-2 text-sm">Reason for reporting restriction<textarea className={fieldClass} name="reason" rows={2} minLength={10} maxLength={1500} required disabled={busy} /></label><Button variant="danger" disabled={busy} type="submit">Restrict this reporter</Button>
+      </form>
+    </details> : null}
     {dispatchable ? <details className="rounded-xl border border-slate-700 p-3">
       <summary className="cursor-pointer text-sm font-medium">Dispatch a response crew</summary>
       <form className="mt-3 space-y-3" onSubmit={(event) => {
@@ -109,18 +133,6 @@ function GovernmentActions({ item, snapshot, run, busy }: { item: HazardCase; sn
         <Button type="submit" disabled={busy}>Assign crew</Button>
       </fieldset></form>
     </details> : null}
-    {dispatchable && item.helpRequested ? <details className="rounded-xl border border-slate-700 p-3">
-      <summary className="cursor-pointer text-sm font-medium">Allocate relief and shelter</summary>
-      <form className="mt-3 space-y-3" onSubmit={(event) => {
-        event.preventDefault(); const form = new FormData(event.currentTarget);
-        void run("relief", { id: item.id, organization: String(form.get("organization") ?? "").trim(), resources: String(form.get("resources") ?? "").trim(), ...(shelterId ? { shelterId, people: Number(form.get("people")) } : {}) }, "Relief assignment saved and shelter capacity updated.");
-      }}><fieldset className="space-y-3" disabled={busy}>
-        <label className="block space-y-2 text-sm">Relief organization<Input name="organization" required minLength={2} defaultValue={item.relief?.organization ?? ""} /></label>
-        <label className="block space-y-2 text-sm">Resources and delivery details<textarea name="resources" className={fieldClass} rows={2} required minLength={5} defaultValue={item.relief?.resources ?? ""} /></label>
-        <label className="block space-y-2 text-sm">Shelter allocation<select className={fieldClass} value={shelterId} onChange={(event) => setShelterId(event.target.value)}><option value="">No shelter allocation</option>{snapshot.shelters.map((shelter) => <option key={shelter.id} value={shelter.id} disabled={shelter.available < 1}>{shelter.name} — {shelter.available} places{ shelter.fixture ? " (demo)" : ""}</option>)}</select></label>
-        {shelterId ? <label className="block space-y-2 text-sm">People to accommodate<Input name="people" type="number" min={1} step={1} max={snapshot.shelters.find((shelter) => shelter.id === shelterId)?.available} required /></label> : null}
-        <Button type="submit" disabled={busy}>Save relief allocation</Button>
-      </fieldset></form>
-    </details> : null}
+    {dispatchable && item.helpRequested ? <ReliefActions item={item} snapshot={snapshot} run={run} busy={busy} /> : null}
   </div>;
 }

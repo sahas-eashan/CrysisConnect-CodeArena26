@@ -36,11 +36,13 @@ export function systemChecks(item: HazardCase, state: HazardState, now: number):
   };
   const nearby = state.cases.filter(candidate => candidate.source === "citizen" && candidate.kind === item.kind && candidate.status !== "rejected" && candidate.status !== "resolved" && now - Date.parse(candidate.createdAt) <= CLUSTER_WINDOW_MS && distanceM(candidate.location, item.location) <= CLUSTER_RADIUS_M);
   // Repeated reports from one account never manufacture independent corroboration.
-  const independent = new Set(nearby.map(candidate => candidate.reportedBy)).size;
+  const banned = new Set((state.bans ?? []).filter(ban => !ban.liftedAt).map(ban => ban.reporterId));
+  const corroboration = item.evidence.filter(evidence => evidence.kind === "community" && evidence.observation === "supports" && now - Date.parse(evidence.uploadedAt) <= CLUSTER_WINDOW_MS && evidence.metadata?.status !== "gps_mismatch");
+  const independent = new Set([...nearby.map(candidate => candidate.reportedBy), ...corroboration.map(evidence => evidence.uploadedBy)].filter(id => !banned.has(id))).size;
   const cluster: HazardCheck = {
     id: "cluster", engine: "SYSTEM", status: independent >= state.thresholds.clusterCount ? "supports" : "inconclusive", confidence: 1,
     reason: `${independent} distinct reporter(s) describe ${item.kind.replaceAll("_", " ")} within 200 m and 2 hours; ${state.thresholds.clusterCount} are required for corroboration. Account independence is not proof of eyewitness independence.`,
-    evidence: nearby.map(candidate => candidate.id),
+    evidence: [...nearby.map(candidate => candidate.id), ...corroboration.map(evidence => `community:${evidence.id}`)],
   };
   return [weather, cluster];
 }
@@ -51,10 +53,21 @@ export function unavailableCheck(id: "image" | "location" | "risk", reason: stri
 
 /** A model recommendation is gated by evidence completeness and conservative policy. */
 export function enforceVerdict(item: HazardCase, checks: HazardCheck[], candidate: HazardVerdict, threshold: number): HazardVerdict {
+  if (candidate.decision === "confirmed" && item.evidence.some(evidence => evidence.kind !== "closure" && evidence.metadata?.status === "gps_mismatch")) return {
+    ...candidate, decision: "needs_verification", reason: "Photo GPS metadata conflicts with the reported location. A human must resolve this conflict before confirmation.",
+  };
+  if (candidate.decision === "confirmed" && item.evidence.some(evidence => evidence.kind === "community" && evidence.observation === "contradicts")) return {
+    ...candidate, decision: "needs_verification", reason: "A nearby resident disputes this hazard. Human review must resolve the conflicting observations.",
+  };
   const applicableAI = checks.filter(check => check.engine === "AI" && check.status !== "not_applicable");
   if (applicableAI.length < 2 || applicableAI.some(check => check.status === "unavailable")) {
-    return { decision: "needs_verification", confidence: null, reason: "AI verification is incomplete. A government reviewer must assess the evidence before this report becomes a confirmed hazard.", origin: "system" };
+    return { decision: "needs_verification", confidence: null, reason: "AI verification is incomplete. A government reviewer must assess the evidence before this report becomes a confirmed hazard.", origin: "system", urgency: "unknown" };
   }
+  // An explicitly failed lookup cannot be overridden by a confident model recommendation.
+  // Older v1 records without geography preserve their prior behavior until enriched by the service.
+  if (candidate.decision === "confirmed" && item.geography && item.geography.status !== "mapped") return {
+    ...candidate, decision: "needs_verification", reason: `Geographic lookup is ${item.geography.status.replaceAll("_", " ")}. A human must verify the location and responsible council before confirmation.`,
+  };
   const confidence = candidate.confidence;
   const noContradictions = !checks.some(check => check.status === "contradicts");
   const systemSupport = checks.some(check => check.engine === "SYSTEM" && check.status === "supports");

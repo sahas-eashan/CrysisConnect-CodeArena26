@@ -92,7 +92,7 @@ function CitizenMapContent() {
       {selectedId && !awsLoading && !hazards.loading && !selectedShelter && !selectedHazardShelter ? <p className="mt-3 text-sm text-amber-300">The requested shelter is unavailable or no longer listed. Select an available shelter before planning travel.</p> : null}
       {selectedShelter || selectedHazardShelter ? <p className="mt-3 text-sm text-sky-200">Selected shelter: {selectedShelter?.name ?? selectedHazardShelter?.name}</p> : null}
     </Card>
-    {hazards.snapshot ? <HazardMap snapshot={hazards.snapshot} point={coordinates} extraMarkers={markers} extraPolygons={polygons} center={center} onLocate={requestLocation} locating={locating} locationError={gpsError} /> : <Card><MapView center={center} markers={markers} polygons={polygons} /><p className="mt-3 text-sm text-muted">Route screening is unavailable until the hazard service responds.</p></Card>}
+    {hazards.snapshot ? <HazardMap snapshot={hazards.snapshot} point={coordinates} extraMarkers={markers} extraPolygons={polygons} center={center} onLocate={requestLocation} locating={locating} locationError={gpsError} stale={Boolean(hazards.error)} /> : <Card><MapView center={center} markers={markers} polygons={polygons} /><p className="mt-3 text-sm text-muted">Route screening is unavailable until the hazard service responds.</p></Card>}
   </div>;
 }
 

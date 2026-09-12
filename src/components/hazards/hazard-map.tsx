@@ -7,6 +7,7 @@ import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { hazardRequest } from "@/lib/hazards/client";
 import type { GeoPoint, HazardRole, HazardSnapshot, SafeRoute } from "@/lib/hazards/types";
 import type { MapMarker } from "@/lib/types";
+import { RouteSummary } from "./route-summary";
 
 export function hazardCircle(point: GeoPoint, radiusM: number) {
   const ring = Array.from({ length: 49 }, (_, index) => {
@@ -16,13 +17,18 @@ export function hazardCircle(point: GeoPoint, radiusM: number) {
   return JSON.stringify({ type: "Polygon", coordinates: [ring] });
 }
 
-export function HazardMap({ snapshot, point, role = "citizen", extraMarkers = [], extraPolygons = [], center, onLocate, locationError, locating = false }: {
+export function HazardMap({ snapshot, point, role = "citizen", extraMarkers = [], extraPolygons = [], center, onLocate, locationError, locating = false, stale = false, demoProfile }: {
   snapshot: HazardSnapshot; point?: GeoPoint | null; role?: HazardRole; extraMarkers?: MapMarker[]; extraPolygons?: string[];
-  center?: [number, number]; onLocate?: () => void; locationError?: string | null; locating?: boolean;
+  center?: [number, number]; onLocate?: () => void; locationError?: string | null; locating?: boolean; stale?: boolean; demoProfile?: string;
 }) {
   const [route, setRoute] = useState<SafeRoute | null>(null);
   const [routing, setRouting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
+  const freshRoute = (candidate?: SafeRoute | null) => !stale && candidate && now - Date.parse(candidate.checkedAt) < 30_000 ? candidate : null;
+  const automaticRoute = point ? snapshot.alerts.map((alert) => freshRoute(alert.route)).find((candidate) => candidate?.status === "available") : null;
+  const displayedRoute = freshRoute(route) ?? automaticRoute;
   const hazardKey = snapshot.hazards.map((hazard) => `${hazard.id}:${hazard.updatedAt}`).sort().join("|");
   const shelterKey = snapshot.shelters.map((shelter) => `${shelter.id}:${shelter.available}`).sort().join("|");
   const weatherKey = JSON.stringify(snapshot.weather.map((reading) => [reading.id, reading.stationId, reading.location.latitude, reading.location.longitude, reading.observedAt, reading.receivedAt, reading.rainfallMm, reading.waterLevelM, reading.dangerLevelM]).sort());
@@ -48,7 +54,7 @@ export function HazardMap({ snapshot, point, role = "citizen", extraMarkers = []
     const requestedContext = currentContext.current;
     setRouting(true); setError(null); setRoute(null);
     try {
-      const screened = await hazardRequest<SafeRoute>("route", { location: point }, role);
+      const screened = await hazardRequest<SafeRoute>("route", { location: point }, role, demoProfile);
       if (currentContext.current === requestedContext) setRoute(screened);
       else setError("Location or hazard information changed during the route check. Check the route again.");
     }
@@ -61,21 +67,17 @@ export function HazardMap({ snapshot, point, role = "citizen", extraMarkers = []
     <CardDescription className="mt-2">Confirmed hazards appear in red; shelters in green; supplies in amber. Hazard boundaries are reported risk areas.</CardDescription>
     {snapshot.fixtureShelters ? <p className="mt-2 text-xs text-amber-300">Shelters shown for this local demonstration are sample locations.</p> : null}
     <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_18rem]">
-      <MapView center={mapCenter} markers={markers} polygons={polygons} route={route?.status === "available" ? route.coordinates : []} className="max-h-[32rem]" />
+      <MapView center={mapCenter} markers={markers} polygons={polygons} route={displayedRoute?.status === "available" ? displayedRoute.coordinates : []} className="max-h-[32rem]" />
       <div className="space-y-4">
         <p className="text-sm font-medium">{snapshot.hazards.length} active verified hazard{snapshot.hazards.length === 1 ? "" : "s"}</p>
         {onLocate ? <Button variant="outline" onClick={onLocate} disabled={locating}>{locating ? "Capturing GPS…" : "Use my location"}</Button> : null}
         {locationError ? <p className="text-sm text-red-300" role="alert">{locationError}</p> : null}
         {point ? <p className="text-xs text-muted">{point.latitude.toFixed(5)}, {point.longitude.toFixed(5)}</p> : <p className="text-sm text-muted">Capture your location to filter area alerts and check a shelter route.</p>}
-        <Button onClick={screenRoute} disabled={!point || routing}>{routing ? "Screening route…" : "Check route to a shelter"}</Button>
+        <Button onClick={screenRoute} disabled={!point || routing || stale}>{routing ? "Screening route…" : "Check route to a shelter"}</Button>
         {error ? <p className="text-sm text-red-300" role="alert">{error}</p> : null}
-        {route ? <div className="space-y-2 rounded-xl border border-slate-700 p-3" role="status">
-          <p className={`font-medium ${route.status === "available" ? "text-sky-300" : "text-amber-300"}`}>{route.status === "available" ? "Route screened against known hazards" : "No screened route available"}</p>
-          <p className="text-sm">{route.reason}</p>
-          {route.shelter ? <p className="text-sm">Destination: {route.shelter.name}</p> : null}
-          {route.distanceM !== undefined ? <p className="text-xs text-muted">{(route.distanceM / 1000).toFixed(1)} km · Checked {new Date(route.checkedAt).toLocaleTimeString()}</p> : null}
-          {route.limitations.map((limitation) => <p className="text-xs text-amber-200" key={limitation}>{limitation}</p>)}
-        </div> : null}
+        {freshRoute(route) ? <RouteSummary route={route!} /> : null}
+        {automaticRoute ? <p className="text-sm text-sky-200">The route attached to your area warning is drawn on the map.</p> : null}
+        {stale ? <p className="text-sm text-amber-200">Route guidance is paused until the latest hazard information can be loaded.</p> : null}
         <p className="text-xs text-muted">Route screening uses known reports and available roads. Follow current instructions from local responders.</p>
       </div>
     </div>
@@ -86,6 +88,7 @@ export function HazardMap({ snapshot, point, role = "citizen", extraMarkers = []
         {snapshot.alerts.slice(0, 8).map((alert) => <div key={alert.id} className="rounded-xl border border-slate-700 bg-slate-950/40 p-3">
           <p className="text-sm font-medium">{alert.title}</p><p className="mt-1 text-sm text-muted">{alert.message}</p>
           <p className="mt-2 text-xs text-muted">{new Date(alert.createdAt).toLocaleString()} · {alert.radiusM / 1000} km around {alert.location.latitude.toFixed(3)}, {alert.location.longitude.toFixed(3)}</p>
+          {freshRoute(alert.route) ? <div className="mt-3"><RouteSummary route={alert.route!} automatic /></div> : alert.route ? <p className="mt-2 text-xs text-amber-200">Updating the route attached to this warning. Follow responder instructions while guidance refreshes.</p> : null}
         </div>)}
         {!snapshot.alerts.length ? <p className="text-sm text-muted">No current area alerts.</p> : null}
       </div>

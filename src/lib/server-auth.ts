@@ -8,6 +8,7 @@ export class AuthError extends Error {
 export function roleFromClaims(payload: JWTPayload): HazardRole {
   const groups = Array.isArray(payload["cognito:groups"]) ? payload["cognito:groups"] : [];
   if (groups.includes("government")) return "government";
+  if (groups.includes("relief") || groups.includes("relief_coordinator")) return "relief";
   if (groups.some((group) => ["ngo", "ngo_individual", "ngo_org_member"].includes(String(group)))) return "ngo";
   return "citizen";
 }
@@ -37,7 +38,8 @@ export async function verifyUserToken(token: string) {
       actor: {
         id: payload.sub,
         role: roleFromClaims(payload),
-        name: typeof payload.name === "string" ? payload.name : undefined
+        name: typeof payload.name === "string" ? payload.name : undefined,
+        councilIds: Array.isArray(payload["cognito:groups"]) ? payload["cognito:groups"].flatMap((group: unknown) => typeof group === "string" && /^council:[A-Za-z0-9_-]{1,80}$/.test(group) ? [group.slice(8)] : []) : []
       } satisfies HazardActor,
       expiresAt: payload.exp
     };
@@ -56,8 +58,10 @@ function readCookie(request: Request, name: string) {
 export async function authenticateRequest(request: Request): Promise<HazardActor> {
   if (demoEnabled()) {
     const requested = request.headers.get("x-demo-role") ?? "citizen";
-    const role: HazardRole = requested === "government" || requested === "ngo" ? requested : "citizen";
-    return { id: `demo-${role}`, role, name: `Demo ${role}` };
+    const role: HazardRole = requested === "government" || requested === "ngo" || requested === "relief" ? requested : "citizen";
+    const profile = request.headers.get("x-demo-profile");
+    const id = role === "citizen" && ["neighbor", "neighbor2"].includes(profile ?? "") ? `demo-${profile}` : `demo-${role}`;
+    return { id, role, name: `Demo ${role}` };
   }
   const bearer = request.headers.get("authorization");
   const token = bearer?.startsWith("Bearer ") ? bearer.slice(7) : readCookie(request, "cc-session");

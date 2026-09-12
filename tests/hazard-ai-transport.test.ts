@@ -3,6 +3,7 @@ import test from "node:test";
 import { evaluateHazard, type EvaluationContext, type EvaluationResult } from "../src/lib/hazards/ai";
 import { initialState } from "../src/lib/hazards/store";
 import type { HazardCase, HazardCheck } from "../src/lib/hazards/types";
+import { resolveGeography } from "../src/lib/hazards/geography";
 
 // This suite exercises the real Gemini adapter with an intercepted HTTP transport.
 // It never delegates evaluation to a fake domain evaluator or contacts a live provider.
@@ -57,7 +58,7 @@ function providerResponse(value: unknown): Response {
 
 function validResponse(request: CapturedRequest, aggregatorConfidence = 0.93): Response {
   const operation = kind(request);
-  if (operation === "aggregator") return providerResponse({ decision: "confirmed", confidence: aggregatorConfidence, reason: "TEST aggregate: photograph, weather and risk evidence support the claimed flood." });
+  if (operation === "aggregator") return providerResponse({ decision: "confirmed", confidence: aggregatorConfidence, reason: "TEST aggregate: photograph, weather and risk evidence support the claimed flood. Urgent assistance is requested.", urgency: "high" });
   return providerResponse({
     status: operation === "location" ? "inconclusive" : "supports",
     confidence: operation === "image" ? 0.94 : operation === "risk" ? 0.92 : 0.35,
@@ -66,7 +67,7 @@ function validResponse(request: CapturedRequest, aggregatorConfidence = 0.93): R
   });
 }
 
-async function interceptedEvaluate(responder: (request: CapturedRequest) => Response): Promise<{ result: EvaluationResult; requests: CapturedRequest[] }> {
+async function interceptedEvaluate(responder: (request: CapturedRequest) => Response, input = context()): Promise<{ result: EvaluationResult; requests: CapturedRequest[] }> {
   const names = ["GEMINI_API_KEY", "GOOGLE_API_KEY", "HAZARD_GEMINI_MODEL"] as const;
   const environment = new Map(names.map(name => [name, process.env[name]]));
   const originalFetch = globalThis.fetch;
@@ -83,7 +84,7 @@ async function interceptedEvaluate(responder: (request: CapturedRequest) => Resp
     requests.push(request);
     return responder(request);
   };
-  try { return { result: await evaluateHazard(context()), requests }; }
+  try { return { result: await evaluateHazard(input), requests }; }
   finally {
     globalThis.fetch = originalFetch;
     for (const [name, value] of environment) {
@@ -115,7 +116,7 @@ test("Gemini transport sends image and location pixels, factual risk context, an
     assert.ok(request.signal, "Provider requests must have a bounded lifetime.");
     assert.match(request.body.systemInstruction.parts[0].text!, /UNTRUSTED EVIDENCE/);
   }
-  for (const operation of ["image", "location"] as const) {
+  for (const operation of ["image", "location", "aggregator"] as const) {
     const request = requests.find(entry => kind(entry) === operation)!;
     assert.deepEqual(request.body.contents[0].parts.find(part => part.inlineData)?.inlineData, { mimeType: "image/png", data: imageBase64 });
   }
@@ -140,6 +141,34 @@ test("Gemini transport sends image and location pixels, factual risk context, an
   assert.equal(result.verdict.confidence, 0.93);
   assert.equal(result.verdict.origin, "ai");
   assert.equal(result.verdict.model, TEST_MODEL);
+  assert.equal(result.verdict.urgency, "high");
+  assert.ok(requests.find(request => kind(request) === "aggregator")!.body.generationConfig.responseSchema.required.includes("urgency"));
+});
+
+test("location and aggregation receive the supplied geography and server EXIF conflict, which prevents automatic confirmation", async () => {
+  const input = context();
+  input.item.location = { latitude: 6.952, longitude: 79.88 };
+  input.item.geography = resolveGeography(input.item.location, { demo: true });
+  input.item.evidence[0].metadata = { status: "gps_mismatch", gps: { latitude: 7.2, longitude: 80.1 }, distanceFromReportM: 36_000, camera: "TEST camera", capturedAtRaw: "2026:09:12 10:00:00", reason: "TEST server-extracted GPS conflicts with the report location." };
+  const { result, requests } = await interceptedEvaluate(request => validResponse(request, 0.99), input);
+  for (const operation of ["location", "aggregator"] as const) {
+    const request = requests.find(request => kind(request) === operation)!;
+    const facts = JSON.parse(request.prompt.split("\nEVIDENCE_JSON:\n")[1].split("\nALL_CHECKS_JSON:\n")[0]);
+    assert.deepEqual(facts.geography, input.item.geography);
+    assert.deepEqual(facts.photoMetadata[0].metadata, input.item.evidence[0].metadata);
+    assert.ok(request.body.contents[0].parts.some(part => part.inlineData));
+  }
+  assert.equal(result.checks.find(check => check.id === "location")!.status, "contradicts");
+  assert.equal(result.verdict.decision, "needs_verification");
+});
+
+test("invalid structured urgency fails aggregation without fabricating a priority", async () => {
+  const { result } = await interceptedEvaluate(request => kind(request) === "aggregator"
+    ? providerResponse({ decision: "confirmed", confidence: 0.99, reason: "TEST otherwise valid result has a malformed urgency value.", urgency: "urgent!!!" })
+    : validResponse(request));
+  assert.equal(result.verdict.decision, "needs_verification");
+  assert.equal(result.verdict.confidence, null);
+  assert.equal(result.verdict.urgency, "unknown");
 });
 
 test("a model confirmation below the operational threshold is gated while its supplied confidence is retained", async () => {

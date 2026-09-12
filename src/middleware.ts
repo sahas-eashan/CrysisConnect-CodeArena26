@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest, demoEnabled } from "@/lib/server-auth";
 
 const guardedPrefixes = {
-  "/citizen": ["citizen", "ngo", "government"],
+  "/citizen": ["citizen", "ngo", "government", "relief"],
   "/ngo": ["ngo", "government"],
-  "/admin": ["government"]
+  "/admin": ["government"],
+  "/relief": ["relief", "government"]
 } as const;
 
 export async function middleware(request: NextRequest) {
@@ -38,5 +39,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/citizen/:path*", "/ngo/:path*", "/admin/:path*"]
+  matcher: ["/citizen/:path*", "/ngo/:path*", "/admin/:path*", "/relief/:path*"]
 };

@@ -171,10 +171,11 @@ test("clustering counts distinct reporters within 200 metres and excludes repeat
 
 test("AI auto-confirmation requires real SYSTEM support and available checks", async t => {
   const { service } = await setup(t, async context => supportive(context));
-  const withoutCorroboration = await service.submitReport(citizen, report());
+  const mappedLocation = { latitude: 6.952, longitude: 79.88 };
+  const withoutCorroboration = await service.submitReport(citizen, report({ location: mappedLocation }));
   assert.equal(withoutCorroboration.status, "needs_verification");
-  await service.submitWeather(government, reading());
-  const supported = await service.submitReport(citizen, report());
+  await service.submitWeather(government, reading({ location: mappedLocation }));
+  const supported = await service.submitReport(citizen, report({ location: mappedLocation }));
   assert.equal(supported.status, "confirmed");
   assert.equal(supported.verdict.confidence, 0.97);
 });

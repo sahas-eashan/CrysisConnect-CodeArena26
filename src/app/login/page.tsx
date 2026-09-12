@@ -14,11 +14,13 @@ import { persistVerifiedSession } from "@/lib/auth-session";
 const roleRedirects: Record<string, string> = {
   citizen: "/citizen/dashboard",
   ngo: "/ngo/dashboard",
-  government: "/admin/dashboard"
+  government: "/admin/dashboard",
+  relief: "/relief/hazards"
 };
 
 function roleFromGroups(groups: string[]) {
   if (groups.includes("government")) return "government";
+  if (groups.includes("relief") || groups.includes("relief_coordinator")) return "relief";
   if (groups.some((group) => ["ngo", "ngo_individual", "ngo_org_member"].includes(group))) return "ngo";
   return "citizen";
 }
@@ -152,6 +154,7 @@ export default function LoginPage() {
                   <option value="citizen">Citizen</option>
                   <option value="ngo">NGO / Field worker</option>
                   <option value="government">Government admin</option>
+                  <option value="relief">Relief coordinator</option>
                 </select>
               )}
             </>

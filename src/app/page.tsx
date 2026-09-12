@@ -126,6 +126,8 @@ export default function HomePage() {
               <Link href="/admin/hazards">
                 <Button variant="secondary">Government Portal</Button>
               </Link>
+              <Link href="/relief/hazards"><Button variant="outline">Relief Coordinator</Button></Link>
+              <Link href="/public-map"><Button variant="outline">Public Hazard Map</Button></Link>
             </div>
           </div>
 

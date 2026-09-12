@@ -26,19 +26,20 @@ export function ReportForm({ run, busy, onLocation }: { run: RunHazardAction; bu
     const locality = String(form.get("locality") ?? "").trim();
     const title = String(form.get("title") ?? "").trim();
     const description = String(form.get("description") ?? "").trim();
-    if (locality.length < 2 || title.length < 5 || description.length < 10) { setError("Enter a ward or locality, a title of at least 5 characters, and a description of at least 10 characters."); return; }
+    if (title.length < 5 || description.length < 10) { setError("Enter a title of at least 5 characters and a description of at least 10 characters."); return; }
     onLocation(coordinates);
-    const saved = await run("report", { title, description: `${description}\nWard / locality: ${locality}`, kind: form.get("kind"), location: coordinates, photo, helpRequested: help, needs: String(form.get("needs") ?? "").trim() }, "Report saved. Follow its verification and responder updates below.");
+    const saved = await run("report", { title, description: `${description}${locality ? `\nLocal landmark: ${locality}` : ""}`, kind: form.get("kind"), location: coordinates, photo, helpRequested: help, needs: String(form.get("needs") ?? "").trim() }, "Report saved. Follow its verification and responder updates below.");
     if (saved) { setPhoto(null); setHelp(false); setFormKey((key) => key + 1); }
   }
   return <Card>
     <CardTitle>Report a hazard or ask for help</CardTitle>
     <CardDescription className="mt-2">Share what you can observe from your current location. Your photo and GPS become evidence for verification.</CardDescription>
+    <p className="mt-2 text-xs text-muted">Your GPS is matched to configured ward boundaries and nearby roads to identify the responsible council. Add a landmark if it helps responders find the location.</p>
     <form className="mt-5 space-y-4" key={formKey} onSubmit={submit}>
       <fieldset className="space-y-4" disabled={busy}>
         <label className="block space-y-2 text-sm">Hazard type<select className={fieldClass} name="kind" defaultValue="flood"><option value="flood">Flood</option><option value="landslide">Landslide</option><option value="storm">Storm</option><option value="tsunami">Tsunami</option><option value="fire">Fire</option><option value="blocked_road">Blocked road</option><option value="fallen_tree">Fallen tree</option><option value="other">Other</option></select></label>
         <label className="block space-y-2 text-sm">Title<Input name="title" placeholder="Floodwater across the main road" required minLength={5} maxLength={160} /></label>
-        <label className="block space-y-2 text-sm">Ward or locality<Input name="locality" placeholder="Ward name and nearby landmark" required minLength={2} maxLength={120} /></label>
+        <label className="block space-y-2 text-sm">Ward or locality (optional landmark)<Input name="locality" placeholder="Nearby landmark or local name" maxLength={120} /></label>
         <label className="block space-y-2 text-sm">What is happening?<textarea className={fieldClass} name="description" rows={3} required minLength={10} maxLength={1800} /></label>
         <div className="space-y-2">
           <Button onClick={requestLocation} disabled={gpsLoading} variant="outline">{gpsLoading ? "Capturing GPS…" : "Capture my location"}</Button>

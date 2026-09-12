@@ -27,7 +27,7 @@ const shelterSchema = z.object({
 
 export function initialState(shelters: Shelter[] = []): HazardState {
   return {
-    version: 1, cases: [], alerts: [], weather: [], feedback: [],
+    version: 1, cases: [], alerts: [], weather: [], feedback: [], residents: [], invitations: [], bans: [], deliveries: [],
     thresholds: { rainMm: 50, clusterCount: 3, autoConfirmConfidence: 0.9, feedbackCount: 0 },
     shelters: structuredClone(shelters),
   };
@@ -37,6 +37,11 @@ function validateState(value: unknown): HazardState {
   const state = value as Partial<HazardState> | null;
   if (!state || state.version !== 1 || !Array.isArray(state.cases) || !Array.isArray(state.alerts) || !Array.isArray(state.weather) || !Array.isArray(state.feedback) || !Array.isArray(state.shelters) || !state.thresholds) {
     throw new HazardError("Hazard storage is invalid or has an unsupported version. Restore a valid backup; existing data has not been replaced.", 503, "STORAGE_INVALID");
+  }
+  // Additive v1 upgrade preserves existing cases and reservations.
+  for (const key of ["residents", "invitations", "bans", "deliveries"] as const) {
+    if (state[key] === undefined) state[key] = [];
+    if (!Array.isArray(state[key])) throw new HazardError("Hazard storage contains invalid workflow records.", 503, "STORAGE_INVALID");
   }
   return state as HazardState;
 }

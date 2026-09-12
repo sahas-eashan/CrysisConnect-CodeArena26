@@ -1,6 +1,9 @@
 /** Shared transport types. Dates are UTC ISO strings; coordinates use latitude/longitude. */
-export type HazardRole = "citizen" | "ngo" | "government";
-export type HazardActor = { id: string; role: HazardRole; name?: string };
+import type { HazardGeography } from "./geography";
+import type { PhotoMetadata } from "./photo-metadata";
+export type HazardRole = "citizen" | "ngo" | "government" | "relief";
+export type HazardActor = { id: string; role: HazardRole; name?: string; councilIds?: string[] };
+export type Urgency = "low" | "moderate" | "high" | "critical" | "unknown";
 export type GeoPoint = { latitude: number; longitude: number };
 export type HazardKind = "flood" | "landslide" | "storm" | "tsunami" | "fire" | "blocked_road" | "fallen_tree" | "other";
 export type HazardStatus = "needs_verification" | "confirmed" | "rejected" | "assigned" | "resolved";
@@ -38,20 +41,23 @@ export type HazardVerdict = {
   reason: string;
   origin: "ai" | "system" | "human";
   model?: string;
+  urgency?: Urgency;
 };
 export type HazardEvidence = {
   id: string;
-  kind: "report" | "additional" | "closure";
+  kind: "report" | "additional" | "community" | "closure";
   dataUrl: string;
   mimeType: string;
   capturedAt?: string;
   uploadedAt: string;
   uploadedBy: string;
   notes: string;
+  metadata?: PhotoMetadata;
+  observation?: "supports" | "contradicts";
 };
 export type HazardHistory = { id: string; at: string; actorId: string; action: string; notes: string };
 export type ReliefInput = { organization: string; resources: string; shelterId?: string; people?: number };
-export type ReliefAssignment = ReliefInput & { assignedBy: string; assignedAt: string };
+export type ReliefAssignment = ReliefInput & { assignedBy: string; assignedAt: string; route?: SafeRoute };
 export type HazardCase = {
   id: string;
   revision: number;
@@ -75,6 +81,8 @@ export type HazardCase = {
   relief?: ReliefAssignment;
   weatherReadingId?: string;
   informationRequest?: { notes: string; requestedAt: string; requestedBy: string };
+  geography?: HazardGeography;
+  councilTicket?: { id: string; councilId: string; councilName: string; status: "open" | "resolved"; assignedAt: string; assignmentSource: "geography" | "officer" };
 };
 export type AreaAlert = {
   id: string;
@@ -86,6 +94,7 @@ export type AreaAlert = {
   radiusM: number;
   createdAt: string;
   expiresAt: string;
+  route?: SafeRoute;
 };
 export type PublicHazard = {
   id: string;
@@ -95,6 +104,9 @@ export type PublicHazard = {
   radiusM: number;
   status: "confirmed" | "assigned";
   updatedAt: string;
+  urgency?: Urgency;
+  ward?: { id: string; name: string };
+  road?: { id: string; name: string; closed: boolean };
 };
 export type Shelter = {
   id: string;
@@ -121,7 +133,23 @@ export type HazardSnapshot = {
   storageMode: "local-demo" | "postgres";
   fixtureShelters: boolean;
   generatedAt: string;
+  actor?: HazardActor;
+  invitations?: CommunityInvitation[];
+  bans?: ReporterBan[];
+  reporters?: { id: string; reports: number; rejected: number; banned: boolean; reason?: string }[];
+  resident?: ResidentProfile;
+  councils?: { id: string; name: string }[];
+  wards?: { id: string; name: string; councilId: string }[];
 };
+export type PublicHazardSnapshot = Pick<HazardSnapshot, "hazards" | "alerts" | "shelters" | "fixtureShelters" | "generatedAt">;
+export type ResidentProfile = { id: string; location?: GeoPoint; locationUpdatedAt?: string; alertsEnabled: boolean };
+export type CommunityInvitation = {
+  id: string; caseId: string; recipientId: string; title: string; location: GeoPoint; notes: string;
+  requestedAt: string; expiresAt: string; status: "pending" | "responded" | "cancelled";
+  response?: { at: string; observation: "supports" | "contradicts" };
+};
+export type ReporterBan = { reporterId: string; reason: string; caseId: string; bannedAt: string; bannedBy: string; liftedAt?: string; liftedBy?: string; liftReason?: string };
+export type AlertDelivery = { recipientId: string; alertId: string; location: GeoPoint; route: SafeRoute; preparedAt: string };
 export type SafeRoute = {
   status: "available" | "unavailable";
   reason: string;
@@ -142,4 +170,8 @@ export type HazardState = {
   feedback: HazardFeedback[];
   thresholds: HazardThresholds;
   shelters: Shelter[];
+  residents?: ResidentProfile[];
+  invitations?: CommunityInvitation[];
+  bans?: ReporterBan[];
+  deliveries?: AlertDelivery[];
 };
