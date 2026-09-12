@@ -9,28 +9,42 @@ import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { configureAmplify } from "@/lib/aws/amplify";
 import { mutations } from "@/lib/aws/graphql/operations";
+import type { AlertDraft } from "@/lib/types";
 
 export default function AdminAlertsPage() {
   const hasAwsConfig = Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [targetArea, setTargetArea] = useState("");
+  const [targetRoles, setTargetRoles] = useState("citizen");
+  const [channels, setChannels] = useState<string[]>(["sms", "push"]);
+
+  function updateChannel(channel: string, checked: boolean) {
+    setChannels((current) =>
+      checked ? [...new Set([...current, channel])] : current.filter((value) => value !== channel)
+    );
+  }
+
+  function applyDraft(draft: AlertDraft) {
+    setTitle(draft.title);
+    setBody(draft.english);
+    setChannels(draft.channel.length ? draft.channel : ["sms", "push"]);
+  }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const formElement = event.currentTarget;
-    const form = new FormData(formElement);
-    const channels = form
-      .getAll("channel")
-      .map((value) => String(value).trim())
+    const selectedChannels = channels
+      .map((value) => value.trim())
       .filter(Boolean);
-    const targetRoles = String(form.get("targetRoles") ?? "")
+    const normalizedRoles = targetRoles
       .split(",")
       .map((value) => value.trim())
       .filter(Boolean);
-    const targetArea = String(form.get("targetArea") ?? "").trim();
 
-    if (!channels.length) {
+    if (!selectedChannels.length) {
       setError("Select at least one delivery channel.");
       return;
     }
@@ -53,11 +67,11 @@ export default function AdminAlertsPage() {
         authMode: "userPool",
         variables: {
           input: {
-            title: String(form.get("title") ?? "").trim(),
-            body: String(form.get("body") ?? "").trim(),
-            channel: channels,
-            targetArea: targetArea || null,
-            targetRoles: targetRoles.length ? targetRoles : null
+            title: title.trim(),
+            body: body.trim(),
+            channel: selectedChannels,
+            targetArea: targetArea.trim() || null,
+            targetRoles: normalizedRoles.length ? normalizedRoles : null
           }
         }
       });
@@ -67,8 +81,12 @@ export default function AdminAlertsPage() {
         throw new Error("The backend did not confirm the alert delivery payload.");
       }
 
-      formElement.reset();
-      setMessage(`Alert saved to the database and dispatched across ${alertResult.sent} channel(s): ${alertResult.channel ?? channels.join(", ")}`);
+      setTitle("");
+      setBody("");
+      setTargetArea("");
+      setTargetRoles("citizen");
+      setChannels(["sms", "push"]);
+      setMessage(`Alert saved to the database and dispatched across ${alertResult.sent} channel(s): ${alertResult.channel ?? selectedChannels.join(", ")}`);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to send the alert.");
     } finally {
@@ -78,7 +96,13 @@ export default function AdminAlertsPage() {
 
   return (
     <div className="space-y-6">
-      <AlertDraftAssistant />
+      <AlertDraftAssistant
+        body={body}
+        channels={channels}
+        onApplyDraft={applyDraft}
+        targetRoles={targetRoles}
+        title={title}
+      />
 
       <div className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
         <Card>
@@ -87,26 +111,65 @@ export default function AdminAlertsPage() {
           Choose channels and affected roles. The backend geofences delivery based on the selected polygon.
         </CardDescription>
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
-          <Input name="title" placeholder="Alert title" required />
+          <Input
+            name="title"
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="Alert title"
+            required
+            value={title}
+          />
           <textarea
             className="min-h-32 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm"
             name="body"
+            onChange={(event) => setBody(event.target.value)}
             placeholder="Alert body"
             required
+            value={body}
           />
-          <Input name="targetArea" placeholder='Target polygon GeoJSON, e.g. {"type":"Polygon",...}' />
-          <Input name="targetRoles" placeholder="Target roles (citizen, ngo, government)" />
+          <Input
+            name="targetArea"
+            onChange={(event) => setTargetArea(event.target.value)}
+            placeholder='Target polygon GeoJSON, e.g. {"type":"Polygon",...}'
+            value={targetArea}
+          />
+          <Input
+            name="targetRoles"
+            onChange={(event) => setTargetRoles(event.target.value)}
+            placeholder="Target roles (citizen, ngo, government)"
+            value={targetRoles}
+          />
           <div className="grid gap-3 md:grid-cols-3">
             <label className="rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm">
-              <input className="mr-2" defaultChecked name="channel" type="checkbox" value="sms" />
+              <input
+                checked={channels.includes("sms")}
+                className="mr-2"
+                name="channel"
+                onChange={(event) => updateChannel("sms", event.target.checked)}
+                type="checkbox"
+                value="sms"
+              />
               SMS
             </label>
             <label className="rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm">
-              <input className="mr-2" defaultChecked name="channel" type="checkbox" value="push" />
+              <input
+                checked={channels.includes("push")}
+                className="mr-2"
+                name="channel"
+                onChange={(event) => updateChannel("push", event.target.checked)}
+                type="checkbox"
+                value="push"
+              />
               Push
             </label>
             <label className="rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm">
-              <input className="mr-2" name="channel" type="checkbox" value="email" />
+              <input
+                checked={channels.includes("email")}
+                className="mr-2"
+                name="channel"
+                onChange={(event) => updateChannel("email", event.target.checked)}
+                type="checkbox"
+                value="email"
+              />
               Email
             </label>
           </div>
