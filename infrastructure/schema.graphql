@@ -1,0 +1,367 @@
+type Disaster {
+  id: ID!
+  title: String!
+  description: String
+  type: String!
+  severity: String!
+  status: String!
+  affectedArea: String
+  centerPoint: String
+  radiusKm: Float
+  secondaryRisks: [String!]
+  createdBy: String
+  createdAt: String
+  updatedAt: String
+}
+
+type SafeZone {
+  id: ID!
+  name: String!
+  location: String
+  boundary: String
+  capacity: Int!
+  currentOccupancy: Int!
+  amenities: [String!]
+  disasterId: ID
+  status: String
+}
+
+type Resource {
+  id: ID!
+  name: String!
+  category: String
+  quantity: Int
+  unit: String
+  status: String
+  location: String
+  managedBy: String
+  orgId: ID
+  disasterId: ID
+}
+
+type ResourceRequest {
+  id: ID!
+  requestedBy: String
+  resourceId: ID
+  resourceName: String
+  quantityNeeded: Int
+  urgency: String
+  status: String
+  fulfilledBy: String
+  location: String
+  createdAt: String
+}
+
+type Profile {
+  id: ID!
+  role: String
+  fullName: String
+  phone: String
+  email: String
+  isAvailable: Boolean
+  distance: Float
+}
+
+type SOSSignal {
+  id: ID!
+  senderId: String
+  location: String
+  type: String
+  description: String
+  status: String
+  assignedTo: String
+  disasterId: ID
+  createdAt: String
+  resolvedAt: String
+  nearestResponders: [Profile!]
+}
+
+type NewsUpdate {
+  id: ID!
+  title: String!
+  content: String!
+  category: String
+  disasterId: ID
+  authorId: String
+  createdAt: String
+}
+
+type Alert {
+  id: ID!
+  title: String!
+  body: String!
+  type: String
+  channel: [String!]
+  targetArea: String
+  targetRoles: [String!]
+  disasterId: ID
+  createdBy: String
+  createdAt: String
+}
+
+type Organization {
+  id: ID!
+  name: String!
+  type: String
+  description: String
+  approvalStatus: String
+  createdAt: String
+}
+
+type DashboardStats {
+  activeDisasters: Int!
+  pendingSOS: Int!
+  totalResources: Int!
+  totalSafeZones: Int!
+  totalUsers: Int!
+}
+
+type AlertResult {
+  sent: Int!
+  channel: String!
+}
+
+type AiAuditRef {
+  id: ID!
+  action: String!
+  model: String!
+  status: String!
+  createdAt: String!
+  reviewStatus: String
+}
+
+type AiRiskFlags {
+  blocked: Boolean!
+  piiDetected: Boolean!
+  promptInjectionRisk: Boolean!
+  unsafeContent: Boolean!
+  reasons: [String!]!
+}
+
+type AiDecisionRationale {
+  summary: String!
+  bullets: [String!]!
+}
+
+type AiRecommendation {
+  title: String!
+  detail: String!
+  priority: String!
+  relatedIds: [String!]
+}
+
+type AiTranslationSet {
+  english: String!
+  sinhala: String!
+  tamil: String!
+}
+
+type AiResponseMeta {
+  status: String!
+  confidence: Float
+  confidenceSource: String!
+  sourceIds: [String!]!
+  warnings: [String!]!
+  requiresHumanApproval: Boolean!
+  audit: AiAuditRef!
+  riskFlags: AiRiskFlags!
+}
+
+type IncidentBrief {
+  meta: AiResponseMeta!
+  headline: String!
+  summary: String!
+  rationale: AiDecisionRationale!
+  recommendations: [AiRecommendation!]!
+  translations: AiTranslationSet!
+}
+
+type AlertDraft {
+  meta: AiResponseMeta!
+  title: String!
+  channel: [String!]!
+  rationale: AiDecisionRationale!
+  english: String!
+  sinhala: String!
+  tamil: String!
+}
+
+type OperationsRecommendationSet {
+  meta: AiResponseMeta!
+  timeframe: String!
+  rationale: AiDecisionRationale!
+  recommendations: [AiRecommendation!]!
+}
+
+type SosTriage {
+  meta: AiResponseMeta!
+  sosId: ID
+  severity: String!
+  urgency: String!
+  responderIds: [String!]!
+  rationale: AiDecisionRationale!
+  recommendations: [AiRecommendation!]!
+}
+
+type ResourceDispatchPlan {
+  meta: AiResponseMeta!
+  requestId: ID
+  rationale: AiDecisionRationale!
+  recommendations: [AiRecommendation!]!
+}
+
+type CitizenGuidance {
+  meta: AiResponseMeta!
+  title: String!
+  safeZoneId: ID
+  resourceIds: [String!]!
+  nextSteps: [String!]!
+  guidance: AiTranslationSet!
+}
+
+type PreparedSosSubmission {
+  meta: AiResponseMeta!
+  original: String!
+  refined: String!
+  checklist: [String!]!
+  translations: AiTranslationSet!
+}
+
+type Query {
+  getDisasters(status: String): [Disaster!]!
+  getDisaster(id: ID!): Disaster
+  getSafeZones(disasterId: ID): [SafeZone!]!
+  getNearestSafeZone(lat: Float!, lon: Float!): SafeZone
+  getResources(disasterId: ID, category: String): [Resource!]!
+  getResourceRequests(status: String): [ResourceRequest!]!
+  getMyResourceRequests(status: String): [ResourceRequest!]!
+  getSOSSignals(status: String): [SOSSignal!]!
+  getMySOSSignals(status: String): [SOSSignal!]!
+  getAlerts(disasterId: ID): [Alert!]!
+  getNewsUpdates(disasterId: ID): [NewsUpdate!]!
+  getOrganizations(status: String): [Organization!]!
+  getDashboardStats: DashboardStats!
+  getCitizenGuidance(disasterId: ID): CitizenGuidance
+  getAiAuditLogs(limit: Int): [AiAuditRef!]!
+}
+
+type Mutation {
+  updateMyLocation(latitude: Float!, longitude: Float!): Boolean!
+  createDisaster(input: DisasterInput!): Disaster!
+  updateDisaster(id: ID!, input: DisasterInput!): Disaster!
+  createSafeZone(input: SafeZoneInput!): SafeZone!
+  updateSafeZoneOccupancy(id: ID!, delta: Int!): SafeZone!
+  createResource(input: ResourceInput!): Resource!
+  updateResource(id: ID!, input: ResourceInput!): Resource!
+  requestResource(input: ResourceRequestInput!): ResourceRequest!
+  fulfillResourceRequest(id: ID!): ResourceRequest!
+  createSOS(input: SOSInput!): SOSSignal!
+  acceptSOS(id: ID!): SOSSignal!
+  resolveSOS(id: ID!): SOSSignal!
+  createNewsUpdate(input: NewsInput!): NewsUpdate!
+  sendAlert(input: AlertInput!): AlertResult!
+  registerOrganization(input: OrgInput!): Organization!
+  approveOrganization(id: ID!, approved: Boolean!): Organization!
+  generateIncidentBrief(disasterId: ID): IncidentBrief!
+  generateAlertDraft(input: AiAlertDraftInput!): AlertDraft!
+  recommendOperations(timeframe: String): OperationsRecommendationSet!
+  triageSosCase(id: ID!): SosTriage!
+  recommendResourceDispatch(id: ID!): ResourceDispatchPlan!
+  prepareSosSubmission(input: AiPrepareSosInput!): PreparedSosSubmission!
+  reviewAiAuditLog(id: ID!, approved: Boolean!): AiAuditRef!
+}
+
+type Subscription {
+  onNewDisaster: Disaster @aws_subscribe(mutations: ["createDisaster"])
+  onDisasterUpdate: Disaster @aws_subscribe(mutations: ["updateDisaster"])
+  onNewSOS: SOSSignal @aws_subscribe(mutations: ["createSOS"])
+  onSOSUpdate: SOSSignal @aws_subscribe(mutations: ["acceptSOS", "resolveSOS"])
+  onMySOSUpdate(senderId: String!): SOSSignal @aws_subscribe(mutations: ["createSOS", "acceptSOS", "resolveSOS"])
+  onNewResourceRequest: ResourceRequest @aws_subscribe(mutations: ["requestResource"])
+  onMyResourceRequestUpdate(requestedBy: String!): ResourceRequest @aws_subscribe(mutations: ["requestResource", "fulfillResourceRequest"])
+  onResourceUpdate: Resource @aws_subscribe(mutations: ["createResource", "updateResource"])
+  onNewNews: NewsUpdate @aws_subscribe(mutations: ["createNewsUpdate"])
+  onAlert: AlertResult @aws_subscribe(mutations: ["sendAlert"])
+}
+
+input DisasterInput {
+  status: String
+  title: String!
+  description: String
+  type: String!
+  severity: String!
+  affectedArea: String
+  centerPoint: String
+  radiusKm: Float
+  secondaryRisks: [String!]
+}
+
+input SafeZoneInput {
+  name: String!
+  location: String!
+  boundary: String
+  capacity: Int!
+  amenities: [String!]
+  disasterId: ID
+}
+
+input ResourceInput {
+  name: String!
+  category: String
+  quantity: Int
+  unit: String
+  location: String
+  disasterId: ID
+  orgId: ID
+}
+
+input ResourceRequestInput {
+  resourceId: ID
+  resourceName: String
+  quantityNeeded: Int
+  urgency: String
+  location: String
+}
+
+input SOSInput {
+  location: String!
+  type: String!
+  description: String
+  disasterId: ID
+}
+
+input NewsInput {
+  title: String!
+  content: String!
+  category: String
+  disasterId: ID
+}
+
+input AlertInput {
+  title: String!
+  body: String!
+  channel: [String!]!
+  targetArea: String
+  targetRoles: [String!]
+  disasterId: ID
+}
+
+input OrgInput {
+  name: String!
+  type: String
+  description: String
+}
+
+input AiAlertDraftInput {
+  title: String!
+  body: String!
+  channel: [String!]!
+  targetArea: String
+  targetRoles: [String!]
+  disasterId: ID
+}
+
+input AiPrepareSosInput {
+  type: String!
+  description: String!
+}

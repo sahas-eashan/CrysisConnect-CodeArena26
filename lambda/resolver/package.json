@@ -1,0 +1,14 @@
+{
+  "name": "crisisconnect-resolver",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "echo \"Transpilation handled in-repo for hackathon delivery\""
+  },
+  "dependencies": {
+    "@aws-sdk/client-lambda": "^3.883.0",
+    "pg": "^8.16.3"
+  }
+}

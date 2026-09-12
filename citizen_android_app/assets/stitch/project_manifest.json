@@ -1,0 +1,35 @@
+{
+  "projectId": "14517401838784747772",
+  "platform": "android",
+  "app": "citizen",
+  "designSystem": {
+    "sourceAssetId": "72af6784950e40599dee3462f888a5fa",
+    "referenceFile": "design_system.md"
+  },
+  "screens": [
+    {
+      "id": "26ac31abb6a84cf28b3886fd477155c2",
+      "title": "Disaster Dashboard",
+      "html": "disaster_dashboard.html",
+      "image": "disaster_dashboard.png"
+    },
+    {
+      "id": "a873dfac035348ec8a4b470272de95ed",
+      "title": "Live Safety Map",
+      "html": "live_safety_map.html",
+      "image": "live_safety_map.png"
+    },
+    {
+      "id": "a2094c27fde347488bb00ec7d6ef139d",
+      "title": "SOS Emergency",
+      "html": "sos_emergency.html",
+      "image": "sos_emergency.png"
+    },
+    {
+      "id": "89353c19627f4a07ac47f306fa69a240",
+      "title": "Resource Browser",
+      "html": "resource_browser.html",
+      "image": "resource_browser.png"
+    }
+  ]
+}

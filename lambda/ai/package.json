@@ -1,0 +1,13 @@
+{
+  "name": "crisisconnect-ai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "echo \"Transpilation handled in-repo for hackathon delivery\""
+  },
+  "dependencies": {
+    "pg": "^8.16.3"
+  }
+}
