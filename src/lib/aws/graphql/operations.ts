@@ -120,6 +120,22 @@ export const queries = {
       }
     }
   `,
+  getAlerts: /* GraphQL */ `
+    query GetAlerts($disasterId: ID) {
+      getAlerts(disasterId: $disasterId) {
+        id
+        title
+        body
+        type
+        channel
+        targetArea
+        targetRoles
+        disasterId
+        createdBy
+        createdAt
+      }
+    }
+  `,
   getNewsUpdates: /* GraphQL */ `
     query GetNewsUpdates($disasterId: ID) {
       getNewsUpdates(disasterId: $disasterId) {

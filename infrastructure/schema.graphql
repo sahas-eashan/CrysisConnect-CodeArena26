@@ -86,6 +86,19 @@ type NewsUpdate {
   createdAt: String
 }
 
+type Alert {
+  id: ID!
+  title: String!
+  body: String!
+  type: String
+  channel: [String!]
+  targetArea: String
+  targetRoles: [String!]
+  disasterId: ID
+  createdBy: String
+  createdAt: String
+}
+
 type Organization {
   id: ID!
   name: String!
@@ -118,6 +131,7 @@ type Query {
   getMyResourceRequests(status: String): [ResourceRequest!]!
   getSOSSignals(status: String): [SOSSignal!]!
   getMySOSSignals(status: String): [SOSSignal!]!
+  getAlerts(disasterId: ID): [Alert!]!
   getNewsUpdates(disasterId: ID): [NewsUpdate!]!
   getOrganizations(status: String): [Organization!]!
   getDashboardStats: DashboardStats!

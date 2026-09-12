@@ -88,6 +88,19 @@ export type NewsUpdate = {
   createdAt?: string | null;
 };
 
+export type Alert = {
+  id: string;
+  title: string;
+  body: string;
+  type?: string | null;
+  channel?: string[] | null;
+  targetArea?: string | null;
+  targetRoles?: string[] | null;
+  disasterId?: string | null;
+  createdBy?: string | null;
+  createdAt?: string | null;
+};
+
 export type Organization = {
   id: string;
   name: string;

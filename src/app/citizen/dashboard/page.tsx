@@ -1,13 +1,20 @@
+"use client";
+
 import Link from "next/link";
 
 import { StatCard } from "@/components/dashboard/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
-import { mockDashboardStats, mockDisasters, mockNews, mockSafeZones } from "@/lib/mock-data";
+import { useLiveFeed } from "@/hooks/use-live-feed";
+import { mockDashboardStats, mockDisasters, mockSafeZones } from "@/lib/mock-data";
 import { percent } from "@/lib/utils";
 
 export default function CitizenDashboardPage() {
+  const { alerts, loading, news } = useLiveFeed();
+  const latestAlert = alerts[0] ?? null;
+  const latestNews = news[0] ?? null;
+
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -79,9 +86,30 @@ export default function CitizenDashboardPage() {
             </div>
           </div>
           <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
+            <p className="text-sm font-medium text-white">Latest emergency alert</p>
+            {latestAlert ? (
+              <>
+                <p className="mt-2 text-sm text-muted">{latestAlert.title}</p>
+                <p className="mt-3 text-sm text-slate-300">{latestAlert.body}</p>
+              </>
+            ) : (
+              <p className="mt-2 text-sm text-muted">
+                {loading ? "Loading alert data from the backend..." : "No live alerts found in the database."}
+              </p>
+            )}
+          </div>
+          <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
             <p className="text-sm font-medium text-white">Latest public notice</p>
-            <p className="mt-2 text-sm text-muted">{mockNews[0].title}</p>
-            <p className="mt-3 text-sm text-slate-300">{mockNews[0].content}</p>
+            {latestNews ? (
+              <>
+                <p className="mt-2 text-sm text-muted">{latestNews.title}</p>
+                <p className="mt-3 text-sm text-slate-300">{latestNews.content}</p>
+              </>
+            ) : (
+              <p className="mt-2 text-sm text-muted">
+                {loading ? "Loading news data from the backend..." : "No live news updates found in the database."}
+              </p>
+            )}
           </div>
           <div className="mt-6 flex gap-3">
             <Button>Get me to safety</Button>

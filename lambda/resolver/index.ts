@@ -205,6 +205,21 @@ function mapNews(row: Record<string, any>) {
   };
 }
 
+function mapAlert(row: Record<string, any>) {
+  return {
+    id: row.id,
+    title: row.title,
+    body: row.body,
+    type: row.type,
+    channel: row.channel ?? [],
+    targetArea: row.target_area ?? null,
+    targetRoles: row.target_roles ?? [],
+    disasterId: row.disaster_id,
+    createdBy: row.created_by,
+    createdAt: row.created_at?.toISOString?.() ?? row.created_at
+  };
+}
+
 function mapOrganization(row: Record<string, any>) {
   return {
     id: row.id,
@@ -365,6 +380,22 @@ export async function handler(event: AppSyncEvent) {
       } finally {
         client.release();
       }
+    }
+    case "getAlerts": {
+      const role = getProfileRole(event);
+      const { rows } = await pool.query(
+        `SELECT *, ST_AsGeoJSON(target_area) AS target_area
+         FROM notifications
+         WHERE ($1::uuid IS NULL OR disaster_id = $1)
+           AND (
+             target_roles IS NULL
+             OR cardinality(target_roles) = 0
+             OR $2::user_role = ANY(target_roles)
+           )
+         ORDER BY created_at DESC`,
+        [args.disasterId ?? null, role]
+      );
+      return rows.map(mapAlert);
     }
     case "getNewsUpdates": {
       const { rows } = await pool.query(
