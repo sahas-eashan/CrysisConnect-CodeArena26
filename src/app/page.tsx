@@ -159,16 +159,37 @@ export default function HomePage() {
           </Card>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {pillars.map(({ icon: Icon, title, description }) => (
-            <Card className="border-white/10 bg-gradient-to-br from-slate-950/95 via-slate-900/90 to-sky-950/40" key={title}>
-              <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/15">
-                <Icon className="h-7 w-7 text-primary" />
-              </div>
-              <CardTitle className="mt-4">{title}</CardTitle>
-              <CardDescription className="mt-2">{description}</CardDescription>
-            </Card>
-          ))}
+        <div className="overflow-hidden">
+          <div className="homepage-pillars-marquee flex gap-4">
+            <div className="grid min-w-full shrink-0 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {pillars.map(({ icon: Icon, title, description }) => (
+                <Card
+                  className="mx-auto w-full max-w-[17rem] border-white/10 bg-gradient-to-br from-slate-950/95 via-slate-900/90 to-sky-950/40"
+                  key={title}
+                >
+                  <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/15">
+                    <Icon className="h-7 w-7 text-primary" />
+                  </div>
+                  <CardTitle className="mt-4">{title}</CardTitle>
+                  <CardDescription className="mt-2">{description}</CardDescription>
+                </Card>
+              ))}
+            </div>
+            <div aria-hidden className="grid min-w-full shrink-0 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {pillars.map(({ icon: Icon, title, description }) => (
+                <Card
+                  className="mx-auto w-full max-w-[17rem] border-white/10 bg-gradient-to-br from-slate-950/95 via-slate-900/90 to-sky-950/40"
+                  key={`repeat-${title}`}
+                >
+                  <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/15">
+                    <Icon className="h-7 w-7 text-primary" />
+                  </div>
+                  <CardTitle className="mt-4">{title}</CardTitle>
+                  <CardDescription className="mt-2">{description}</CardDescription>
+                </Card>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="grid gap-6">
