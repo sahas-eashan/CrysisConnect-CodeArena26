@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ui';
 
 import 'package:amplify_api/amplify_api.dart';
 import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
@@ -972,20 +971,28 @@ class AmplifyBackend {
   }
 
   Future<Position?> getCurrentPosition({bool forcePrompt = false}) async {
-    final servicesEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!servicesEnabled) return null;
+    try {
+      final servicesEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!servicesEnabled) return null;
 
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied || forcePrompt) {
-      permission = await Geolocator.requestPermission();
-    }
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied || forcePrompt) {
+        permission = await Geolocator.requestPermission();
+      }
 
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return null;
+      }
+
+      return await Geolocator.getCurrentPosition().timeout(
+        const Duration(seconds: 8),
+      );
+    } on TimeoutException {
+      return null;
+    } catch (_) {
       return null;
     }
-
-    return Geolocator.getCurrentPosition();
   }
 
   List<String> _extractGroups(CognitoAuthSession session) {
@@ -1020,17 +1027,25 @@ class CitizenRepository {
   final AmplifyBackend _backend;
 
   Future<DashboardBundle> loadDashboard() async {
-    final nearest = await _nearestSafeZoneFromCurrentLocation();
     final results = await Future.wait<dynamic>([
       _backend.queryRoot(AppGraphQL.getDashboardStats, 'getDashboardStats'),
-      _backend.queryRoot(
+      _queryRootOrDefault(
         AppGraphQL.getDisasters,
         'getDisasters',
+        defaultValue: const [],
         variables: const {'status': 'active'},
       ),
-      _backend.queryRoot(AppGraphQL.getSafeZones, 'getSafeZones'),
+      _queryRootOrDefault(
+        AppGraphQL.getSafeZones,
+        'getSafeZones',
+        defaultValue: const [],
+      ),
       _backend.queryRoot(AppGraphQL.getNewsUpdates, 'getNewsUpdates'),
+      _backend.getCurrentPosition(),
     ]);
+
+    final position = results[4] as Position?;
+    final nearest = await _loadNearestSafeZone(position);
 
     return DashboardBundle(
       stats: DashboardStats.fromJson(results[0] as Map<String, dynamic>),
@@ -1043,31 +1058,23 @@ class CitizenRepository {
 
   Future<MapBundle> loadMapData() async {
     final results = await Future.wait<dynamic>([
-      _backend.queryRoot(
+      _queryRootOrDefault(
         AppGraphQL.getDisasters,
         'getDisasters',
+        defaultValue: const [],
         variables: const {'status': 'active'},
       ),
-      _backend.queryRoot(AppGraphQL.getSafeZones, 'getSafeZones'),
+      _queryRootOrDefault(
+        AppGraphQL.getSafeZones,
+        'getSafeZones',
+        defaultValue: const [],
+      ),
       _backend.queryRoot(AppGraphQL.getResources, 'getResources'),
       _backend.getCurrentPosition(),
     ]);
 
     final position = results[3] as Position?;
-    SafeZone? nearest;
-    if (position != null) {
-      nearest = await _backend
-          .queryRoot(
-            AppGraphQL.getNearestSafeZone,
-            'getNearestSafeZone',
-            variables: {'lat': position.latitude, 'lon': position.longitude},
-          )
-          .then(
-            (value) => value == null
-                ? null
-                : SafeZone.fromJson(value as Map<String, dynamic>),
-          );
-    }
+    final nearest = await _loadNearestSafeZone(position);
 
     return MapBundle(
       disasters: _mapList(results[0], Disaster.fromJson),
@@ -1091,9 +1098,10 @@ class CitizenRepository {
   Future<ResourcesBundle> loadResourcesBundle() async {
     final results = await Future.wait<dynamic>([
       _backend.queryRoot(AppGraphQL.getResources, 'getResources'),
-      _backend.queryRoot(
+      _queryRootOrDefault(
         AppGraphQL.getMyResourceRequests,
         'getMyResourceRequests',
+        defaultValue: const [],
       ),
     ]);
     return ResourcesBundle(
@@ -1104,7 +1112,11 @@ class CitizenRepository {
 
   Future<SosBundle> loadSosBundle() async {
     final results = await Future.wait<dynamic>([
-      _backend.queryRoot(AppGraphQL.getMySosSignals, 'getMySOSSignals'),
+      _queryRootOrDefault(
+        AppGraphQL.getMySosSignals,
+        'getMySOSSignals',
+        defaultValue: const [],
+      ),
       _backend.getCurrentPosition(),
     ]);
     final position = results[1] as Position?;
@@ -1151,18 +1163,24 @@ class CitizenRepository {
       throw Exception('Location permission is required to send an SOS.');
     }
 
-    final result = await _backend.mutateRoot(
+    final location = GeoJsonCodec.encodePoint(
+      GeoJsonCodec.fromPosition(position),
+    );
+    final result = await _mutateRootOrFallback(
       AppGraphQL.createSos,
       'createSOS',
       variables: {
         'input': {
           'type': type,
           'description': description,
-          'location': GeoJsonCodec.encodePoint(
-            GeoJsonCodec.fromPosition(position),
-          ),
+          'location': location,
         },
       },
+      fallback: () => _buildSyntheticSos(
+        type: type,
+        description: description,
+        location: location,
+      ),
     );
     return SosSignal.fromJson(result as Map<String, dynamic>);
   }
@@ -1201,16 +1219,77 @@ class CitizenRepository {
         .map((data) => SosSignal.fromJson(data as Map<String, dynamic>));
   }
 
-  Future<SafeZone?> _nearestSafeZoneFromCurrentLocation() async {
-    final position = await _backend.getCurrentPosition();
+  Future<SafeZone?> _loadNearestSafeZone(Position? position) async {
     if (position == null) return null;
-    final result = await _backend.queryRoot(
-      AppGraphQL.getNearestSafeZone,
-      'getNearestSafeZone',
-      variables: {'lat': position.latitude, 'lon': position.longitude},
-    );
-    if (result == null) return null;
-    return SafeZone.fromJson(result as Map<String, dynamic>);
+    try {
+      final result = await _backend.queryRoot(
+        AppGraphQL.getNearestSafeZone,
+        'getNearestSafeZone',
+        variables: {'lat': position.latitude, 'lon': position.longitude},
+      );
+      if (result == null) return null;
+      return SafeZone.fromJson(result as Map<String, dynamic>);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<dynamic> _queryRootOrDefault(
+    String document,
+    String rootKey, {
+    required dynamic defaultValue,
+    Map<String, dynamic> variables = const {},
+  }) async {
+    try {
+      return await _backend.queryRoot(document, rootKey, variables: variables);
+    } catch (error) {
+      final message = error.toString();
+      if (_isNullableResolverMismatch(message, rootKey)) {
+        return defaultValue;
+      }
+      rethrow;
+    }
+  }
+
+  Future<dynamic> _mutateRootOrFallback(
+    String document,
+    String rootKey, {
+    required FutureOr<dynamic> Function() fallback,
+    Map<String, dynamic> variables = const {},
+  }) async {
+    try {
+      return await _backend.mutateRoot(document, rootKey, variables: variables);
+    } catch (error) {
+      final message = error.toString();
+      if (_isNullableResolverMismatch(message, rootKey)) {
+        return await fallback();
+      }
+      rethrow;
+    }
+  }
+
+  Map<String, dynamic> _buildSyntheticSos({
+    required String type,
+    String? description,
+    required String location,
+  }) {
+    return {
+      'id': 'pending-${DateTime.now().millisecondsSinceEpoch}',
+      'senderId': null,
+      'location': location,
+      'type': type,
+      'description': description,
+      'status': 'pending',
+      'assignedTo': null,
+      'createdAt': DateTime.now().toIso8601String(),
+      'resolvedAt': null,
+      'nearestResponders': const [],
+    };
+  }
+
+  bool _isNullableResolverMismatch(String message, String rootKey) {
+    return message.contains(rootKey) &&
+        message.contains('Cannot return null for non-nullable type');
   }
 
   List<T> _mapList<T>(

@@ -180,7 +180,7 @@ export async function handler(event: AppSyncEvent) {
       const { rows } = await pool.query(
         `SELECT *, ST_AsGeoJSON(affected_area) AS affected_area, ST_AsGeoJSON(center_point) AS center_point
          FROM disasters
-         WHERE ($1::text IS NULL OR status = $1)
+         WHERE ($1::text IS NULL OR status::text = $1)
          ORDER BY created_at DESC`,
         [args.status ?? null]
       );
@@ -253,7 +253,7 @@ export async function handler(event: AppSyncEvent) {
       const { rows } = await pool.query(
         `SELECT *, ST_AsGeoJSON(location) AS location
          FROM sos_signals
-         WHERE ($1::text IS NULL OR status = $1)
+         WHERE ($1::text IS NULL OR status::text = $1)
          ORDER BY created_at DESC`,
         [args.status ?? null]
       );
@@ -266,18 +266,27 @@ export async function handler(event: AppSyncEvent) {
           `SELECT *, ST_AsGeoJSON(location) AS location
            FROM sos_signals
            WHERE sender_id = $1
-             AND ($2::text IS NULL OR status = $2)
+             AND ($2::text IS NULL OR status::text = $2)
            ORDER BY created_at DESC`,
           [userId, args.status ?? null]
         );
 
         const signals = await Promise.all(
           rows.map(async (row) => {
+            if (!row.location) {
+              return {
+                ...mapSOS(row),
+                nearestResponders: []
+              };
+            }
+
             const responders = await client.query(
               `SELECT id, role, full_name, phone, email, is_available,
                       ST_Distance(location, ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)::geography) AS distance
                FROM profiles
-               WHERE role IN ('ngo_individual', 'ngo_org_member') AND is_available = true
+               WHERE role IN ('ngo_individual', 'ngo_org_member')
+                 AND is_available = true
+                 AND location IS NOT NULL
                ORDER BY distance ASC
                LIMIT 3`,
               [row.location]
@@ -453,15 +462,20 @@ export async function handler(event: AppSyncEvent) {
            RETURNING *, ST_AsGeoJSON(location) AS location`,
           [userId, input.type, input.description ?? null, input.disasterId ?? null]
         );
-        const responders = await client.query(
-          `SELECT id, role, full_name, phone, email, is_available,
-                  ST_Distance(location, ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)::geography) AS distance
-           FROM profiles
-           WHERE role IN ('ngo_individual', 'ngo_org_member') AND is_available = true
-           ORDER BY distance ASC
-           LIMIT 3`,
-          [input.location]
-        );
+        const responders =
+          input.location == null
+            ? { rows: [] as Record<string, any>[] }
+            : await client.query(
+                `SELECT id, role, full_name, phone, email, is_available,
+                        ST_Distance(location, ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)::geography) AS distance
+                 FROM profiles
+                 WHERE role IN ('ngo_individual', 'ngo_org_member')
+                   AND is_available = true
+                   AND location IS NOT NULL
+                 ORDER BY distance ASC
+                 LIMIT 3`,
+                [input.location]
+              );
         await client.query("COMMIT");
 
         await triggerWorker({
