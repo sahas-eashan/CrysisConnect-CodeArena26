@@ -36,6 +36,7 @@ locals {
     "Query.getNearestSafeZone"         = "Query"
     "Query.getResources"               = "Query"
     "Query.getResourceRequests"        = "Query"
+    "Query.getMyResourceRequests"      = "Query"
     "Query.getSOSSignals"              = "Query"
     "Query.getNewsUpdates"             = "Query"
     "Query.getOrganizations"           = "Query"

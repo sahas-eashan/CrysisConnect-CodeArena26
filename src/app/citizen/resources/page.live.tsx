@@ -9,11 +9,12 @@ import { Input } from "@/components/ui/input";
 import { configureAmplify } from "@/lib/aws/amplify";
 import { mutations, queries } from "@/lib/aws/graphql/operations";
 import { mockResourceRequests, mockResources } from "@/lib/mock-data";
-import type { Resource } from "@/lib/types";
+import type { Resource, ResourceRequest } from "@/lib/types";
 
 export default function CitizenResourcesPage() {
   const hasAwsConfig = Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL);
   const [resources, setResources] = useState<Resource[]>(() => (hasAwsConfig ? [] : mockResources));
+  const [requests, setRequests] = useState<ResourceRequest[]>(() => (hasAwsConfig ? [] : mockResourceRequests));
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL));
@@ -24,7 +25,7 @@ export default function CitizenResourcesPage() {
 
     let active = true;
 
-    async function loadResources() {
+    async function loadData() {
       configureAmplify();
       const client = generateClient();
 
@@ -32,14 +33,33 @@ export default function CitizenResourcesPage() {
         setLoading(true);
         setError(null);
 
-        const result = await client.graphql({ query: queries.getResources });
+        const [resourcesResult, requestsResult] = await Promise.allSettled([
+          client.graphql({ query: queries.getResources }),
+          client.graphql({ query: queries.getMyResourceRequests })
+        ]);
         if (!active) return;
 
-        setResources(((result as any).data?.getResources ?? []) as Resource[]);
+        if (resourcesResult.status === "fulfilled") {
+          setResources(((resourcesResult.value as any).data?.getResources ?? []) as Resource[]);
+        } else {
+          setResources([]);
+        }
+
+        if (requestsResult.status === "fulfilled") {
+          setRequests(((requestsResult.value as any).data?.getMyResourceRequests ?? []) as ResourceRequest[]);
+        } else {
+          setRequests([]);
+          setError(
+            requestsResult.reason instanceof Error
+              ? requestsResult.reason.message
+              : "Unable to load your current requests from the backend."
+          );
+        }
       } catch (loadError) {
         if (!active) return;
 
         setResources([]);
+        setRequests([]);
         setError(loadError instanceof Error ? loadError.message : "Unable to load resources from the backend.");
       } finally {
         if (active) {
@@ -48,7 +68,7 @@ export default function CitizenResourcesPage() {
       }
     }
 
-    void loadResources();
+    void loadData();
 
     return () => {
       active = false;
@@ -94,6 +114,7 @@ export default function CitizenResourcesPage() {
         throw new Error("The backend did not return a saved resource request record.");
       }
 
+      setRequests((current) => [createdRequest as ResourceRequest, ...current]);
       formElement.reset();
       setMessage(`Resource request saved to the real backend. Request ID: ${createdRequest.id}`);
     } catch (submitError) {
@@ -159,12 +180,26 @@ export default function CitizenResourcesPage() {
         {message ? <p className="mt-4 text-sm text-success">{message}</p> : null}
 
         <div className="mt-8">
-          <p className="text-sm font-medium text-white">Existing open request</p>
-          <div className="mt-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
-            <p className="font-medium">{mockResourceRequests[0].resourceName}</p>
-            <p className="mt-1 text-sm text-muted">
-              {mockResourceRequests[0].quantityNeeded} units • {mockResourceRequests[0].urgency} priority
-            </p>
+          <p className="text-sm font-medium text-white">My requests</p>
+          <div className="mt-3 space-y-3">
+            {requests.map((request) => (
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4" key={request.id}>
+                <div className="flex items-center justify-between gap-4">
+                  <p className="font-medium text-white">{request.resourceName ?? "Unnamed request"}</p>
+                  <span className="rounded-full bg-slate-900 px-3 py-1 text-xs text-slate-300">
+                    {request.status ?? "pending"}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-muted">
+                  {request.quantityNeeded ?? 0} units | {request.urgency ?? "normal"} priority
+                </p>
+              </div>
+            ))}
+            {!requests.length && !loading ? (
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-muted">
+                You do not have any saved requests yet.
+              </div>
+            ) : null}
           </div>
         </div>
       </Card>
