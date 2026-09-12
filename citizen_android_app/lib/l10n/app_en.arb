@@ -1,0 +1,19 @@
+{
+  "appTitle": "CrisisConnect",
+  "@appTitle": {
+    "description": "The title of the application"
+  },
+  "signInButton": "Sign In",
+  "@signInButton": {
+    "description": "Button text for signing in"
+  },
+  "dashboardTitle": "Citizen Portal",
+  "@dashboardTitle": {
+    "description": "Title of the citizen dashboard"
+  },
+  "activeDisasters": "Active disasters",
+  "safeZones": "Safe zones",
+  "resources": "Resources",
+  "nearestSafeZones": "Nearest safe zones",
+  "liveCrisisUpdates": "Live Crisis Updates"
+}

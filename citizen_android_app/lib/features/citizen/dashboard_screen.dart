@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:crisisconnect_citizen/core/backend.dart';
 import 'package:flutter/material.dart';
+import 'package:crisisconnect_citizen/l10n/app_localizations.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({
@@ -92,21 +93,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   Expanded(
                     child: _StatCard(
-                      label: 'Active disasters',
+                      label: AppLocalizations.of(context)!.activeDisasters,
                       value: bundle.stats.activeDisasters.toString(),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: _StatCard(
-                      label: 'Safe zones',
+                      label: AppLocalizations.of(context)!.safeZones,
                       value: bundle.stats.totalSafeZones.toString(),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: _StatCard(
-                      label: 'Resources',
+                      label: AppLocalizations.of(context)!.resources,
                       value: bundle.stats.totalResources.toString(),
                     ),
                   ),
