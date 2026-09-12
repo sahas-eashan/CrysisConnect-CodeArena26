@@ -511,8 +511,7 @@ class AiResponseMeta {
       warnings: (json['warnings'] as List<dynamic>? ?? const [])
           .map((item) => item.toString())
           .toList(),
-      requiresHumanApproval:
-          json['requiresHumanApproval'] as bool? ?? false,
+      requiresHumanApproval: json['requiresHumanApproval'] as bool? ?? false,
       audit: AiAuditRef.fromJson(
         (json['audit'] as Map<String, dynamic>? ?? const {}),
       ),
@@ -1187,23 +1186,41 @@ class AmplifyBackend {
   Future<Position?> getCurrentPosition({bool forcePrompt = false}) async {
     try {
       final servicesEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!servicesEnabled) return null;
+      if (!servicesEnabled) {
+        if (forcePrompt) {
+          await Geolocator.openLocationSettings();
+        }
+        return await Geolocator.getLastKnownPosition();
+      }
 
       var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied || forcePrompt) {
+      if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
-
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        return null;
+      if (permission == LocationPermission.deniedForever) {
+        if (forcePrompt) {
+          await Geolocator.openAppSettings();
+        }
+        return await Geolocator.getLastKnownPosition();
       }
 
-      return await Geolocator.getCurrentPosition().timeout(
-        const Duration(seconds: 8),
-      );
-    } on TimeoutException {
-      return null;
+      if (permission == LocationPermission.denied) {
+        return await Geolocator.getLastKnownPosition();
+      }
+
+      final lastKnown = await Geolocator.getLastKnownPosition();
+
+      try {
+        return await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+          ),
+        ).timeout(const Duration(seconds: 12));
+      } on TimeoutException {
+        return lastKnown;
+      } catch (_) {
+        return lastKnown;
+      }
     } catch (_) {
       return null;
     }
@@ -1301,6 +1318,22 @@ class CitizenRepository {
     );
   }
 
+  Future<LatLng?> resolveCurrentLocation({bool forcePrompt = false}) async {
+    final position = await _backend.getCurrentPosition(
+      forcePrompt: forcePrompt,
+    );
+    if (position == null) return null;
+    return LatLng(position.latitude, position.longitude);
+  }
+
+  Future<SafeZone?> loadNearestSafeZoneForLocation(LatLng? location) async {
+    if (location == null) return null;
+    return _loadNearestSafeZoneAt(
+      latitude: location.latitude,
+      longitude: location.longitude,
+    );
+  }
+
   Future<List<NewsUpdate>> loadNews() async {
     final result = await _backend.queryRoot(
       AppGraphQL.getNewsUpdates,
@@ -1323,7 +1356,6 @@ class CitizenRepository {
       );
     }
   }
-
 
   Future<ResourcesBundle> loadResourcesBundle() async {
     final results = await Future.wait<dynamic>([
@@ -1435,7 +1467,6 @@ class CitizenRepository {
     }
   }
 
-
   Stream<NewsUpdate> subscribeToNews() {
     return _backend
         .subscribeRoot(AppGraphQL.onNewNews, 'onNewNews')
@@ -1472,11 +1503,21 @@ class CitizenRepository {
 
   Future<SafeZone?> _loadNearestSafeZone(Position? position) async {
     if (position == null) return null;
+    return _loadNearestSafeZoneAt(
+      latitude: position.latitude,
+      longitude: position.longitude,
+    );
+  }
+
+  Future<SafeZone?> _loadNearestSafeZoneAt({
+    required double latitude,
+    required double longitude,
+  }) async {
     try {
       final result = await _backend.queryRoot(
         AppGraphQL.getNearestSafeZone,
         'getNearestSafeZone',
-        variables: {'lat': position.latitude, 'lon': position.longitude},
+        variables: {'lat': latitude, 'lon': longitude},
       );
       if (result == null) return null;
       return SafeZone.fromJson(result as Map<String, dynamic>);
@@ -1572,4 +1613,3 @@ class AppColors {
   static const onSurface = Color(0xFF111D23);
   static const error = Color(0xFFBA1A1A);
 }
-
