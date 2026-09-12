@@ -180,6 +180,9 @@ class AppLocalizationsSi extends AppLocalizations {
   String get getMeToSafety => 'මාව ආරක්‍ෂිත ස්ථානයට ගෙන යන්න';
 
   @override
+  String get inAppDirections => 'යෙදුම තුළ මාර්ගය';
+
+  @override
   String get directionsButton => 'මාර්ගය';
 
   @override
@@ -368,7 +371,7 @@ class AppLocalizationsSi extends AppLocalizations {
   String get cancelNavigation => 'අවලංගු කරන්න';
 
   @override
-  String get routeNotFound => 'ආරක්‍ෂිත ස්ථානයට මාර්ගයක් සොයා ගත නොහැක.';
+  String get routeNotFound => 'මෙම ස්ථානයට මාර්ගයක් සොයා ගත නොහැක.';
 
   @override
   String get locationNeeded => 'මාර්ගය සඳහා වත්මන් ස්ථානය අවශ්‍යයි.';

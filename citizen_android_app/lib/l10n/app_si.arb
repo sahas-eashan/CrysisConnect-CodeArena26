@@ -53,6 +53,7 @@
   "filterResources": "සම්පත්",
   "liveMapBanner": "AppSync + PostGIS සිට සජීවී පුරවැසි ආරක්‍ෂිත සිතියම",
   "getMeToSafety": "මාව ආරක්‍ෂිත ස්ථානයට ගෙන යන්න",
+  "inAppDirections": "යෙදුම තුළ මාර්ගය",
   "directionsButton": "මාර්ගය",
   "openInGoogleMaps": "Google Maps තුළ විවෘත කරන්න",
   "nearestSafeZone": "ළඟම ආරක්‍ෂිත ස්ථානය",
@@ -110,7 +111,7 @@
   "routeDistance": "කි.මී. {distance}",
   "routeDuration": "මිනි. {minutes}",
   "cancelNavigation": "අවලංගු කරන්න",
-  "routeNotFound": "ආරක්‍ෂිත ස්ථානයට මාර්ගයක් සොයා ගත නොහැක.",
+  "routeNotFound": "මෙම ස්ථානයට මාර්ගයක් සොයා ගත නොහැක.",
   "locationNeeded": "මාර්ගය සඳහා වත්මන් ස්ථානය අවශ්‍යයි.",
   "googleMapsOpenFailed": "Google Maps මාර්ගය විවෘත කළ නොහැක."
 }

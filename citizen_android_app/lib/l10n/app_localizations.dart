@@ -422,6 +422,12 @@ abstract class AppLocalizations {
   /// **'Get Me To Safety'**
   String get getMeToSafety;
 
+  /// No description provided for @inAppDirections.
+  ///
+  /// In en, this message translates to:
+  /// **'In-app directions'**
+  String get inAppDirections;
+
   /// No description provided for @directionsButton.
   ///
   /// In en, this message translates to:
@@ -767,7 +773,7 @@ abstract class AppLocalizations {
   /// No description provided for @routeNotFound.
   ///
   /// In en, this message translates to:
-  /// **'Could not find a route to the safe zone.'**
+  /// **'Could not find a route to this location.'**
   String get routeNotFound;
 
   /// No description provided for @locationNeeded.

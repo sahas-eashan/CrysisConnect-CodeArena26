@@ -56,6 +56,7 @@
   "filterResources": "Resources",
   "liveMapBanner": "Live citizen safety map from AppSync + PostGIS",
   "getMeToSafety": "Get Me To Safety",
+  "inAppDirections": "In-app directions",
   "directionsButton": "Directions",
   "openInGoogleMaps": "Open in Google Maps",
   "nearestSafeZone": "Nearest Safe Zone",
@@ -118,7 +119,7 @@
   "routeDuration": "{minutes} min",
   "@routeDuration": { "placeholders": { "minutes": { "type": "String" } } },
   "cancelNavigation": "Cancel",
-  "routeNotFound": "Could not find a route to the safe zone.",
+  "routeNotFound": "Could not find a route to this location.",
   "locationNeeded": "Current location is needed for routing.",
   "googleMapsOpenFailed": "Could not open Google Maps directions."
 }

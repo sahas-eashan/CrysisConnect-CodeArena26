@@ -180,6 +180,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get getMeToSafety => 'Get Me To Safety';
 
   @override
+  String get inAppDirections => 'In-app directions';
+
+  @override
   String get directionsButton => 'Directions';
 
   @override
@@ -369,7 +372,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cancelNavigation => 'Cancel';
 
   @override
-  String get routeNotFound => 'Could not find a route to the safe zone.';
+  String get routeNotFound => 'Could not find a route to this location.';
 
   @override
   String get locationNeeded => 'Current location is needed for routing.';
