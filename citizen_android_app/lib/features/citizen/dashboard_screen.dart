@@ -331,6 +331,22 @@ class _AiGuidanceCard extends StatelessWidget {
 
   final CitizenAiGuidance guidance;
 
+  String _localizedGuidance(BuildContext context) {
+    final languageCode = Localizations.localeOf(context).languageCode;
+    switch (languageCode) {
+      case 'si':
+        return guidance.guidance.sinhala.isNotEmpty
+            ? guidance.guidance.sinhala
+            : guidance.guidance.english;
+      case 'ta':
+        return guidance.guidance.tamil.isNotEmpty
+            ? guidance.guidance.tamil
+            : guidance.guidance.english;
+      default:
+        return guidance.guidance.english;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -357,7 +373,7 @@ class _AiGuidanceCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            guidance.guidance.english,
+            _localizedGuidance(context),
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: AppColors.surfaceVariantText,
               height: 1.45,
