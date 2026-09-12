@@ -1,33 +1,172 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { generateClient } from "aws-amplify/api";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
-import { useSubscription } from "@/hooks/use-subscription";
+import { configureAmplify } from "@/lib/aws/amplify";
+import { mutations, queries, subscriptions } from "@/lib/aws/graphql/operations";
 import { mockSOSSignals } from "@/lib/mock-data";
-import { subscriptions } from "@/lib/aws/graphql/operations";
+import type { SOSSignal } from "@/lib/types";
+
+function sortSignals(signals: SOSSignal[]) {
+  const statusWeight: Record<string, number> = {
+    pending: 0,
+    assigned: 1,
+    in_progress: 2,
+    resolved: 3
+  };
+
+  return [...signals].sort((left, right) => {
+    const leftStatus = statusWeight[left.status?.toLowerCase() ?? "pending"] ?? 4;
+    const rightStatus = statusWeight[right.status?.toLowerCase() ?? "pending"] ?? 4;
+    if (leftStatus !== rightStatus) return leftStatus - rightStatus;
+    return (right.createdAt ?? "").localeCompare(left.createdAt ?? "");
+  });
+}
 
 export default function NgoSOSQueuePage() {
-  const [accepted, setAccepted] = useState<string | null>(null);
-  const [liveMessage, setLiveMessage] = useState("Waiting for AppSync events...");
+  const hasAwsConfig = Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL);
+  const [signals, setSignals] = useState<SOSSignal[]>(() => (hasAwsConfig ? [] : sortSignals(mockSOSSignals)));
+  const [error, setError] = useState<string | null>(null);
+  const [liveMessage, setLiveMessage] = useState(
+    hasAwsConfig ? "Loading live SOS queue from the backend..." : "Demo mode: showing local SOS examples."
+  );
+  const [loading, setLoading] = useState(Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL));
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
 
-  const onMessage = useCallback(() => {
-    setLiveMessage("Live SOS event received from AppSync subscription.");
-  }, []);
+  useEffect(() => {
+    if (!hasAwsConfig) return;
 
-  useSubscription(subscriptions.onNewSOS, onMessage);
+    configureAmplify();
+    const client = generateClient();
+    let active = true;
+
+    async function loadQueue(message?: string) {
+      try {
+        if (active) {
+          setLoading(true);
+          setError(null);
+          if (message) setLiveMessage(message);
+        }
+
+        const result = await client.graphql({
+          query: queries.getSOSSignals,
+          authMode: "userPool"
+        });
+
+        if (!active) return;
+
+        const nextSignals = ((result as any).data?.getSOSSignals ?? []) as SOSSignal[];
+        setSignals(sortSignals(nextSignals));
+        setLiveMessage("Live SOS queue loaded from the backend.");
+      } catch (loadError) {
+        if (!active) return;
+
+        setSignals([]);
+        const message =
+          loadError instanceof Error ? loadError.message : "Unable to load the live SOS queue from the backend.";
+        setError(
+          message.includes("Unauthorized")
+            ? "This Cognito account is not in the NGO or government group, so live SOS signals cannot be loaded here."
+            : message
+        );
+        setLiveMessage("Unable to load live SOS updates.");
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void loadQueue();
+
+    const unsubscribeNew = (client.graphql({
+      query: subscriptions.onNewSOS,
+      authMode: "userPool"
+    }) as any).subscribe({
+      next: () => {
+        void loadQueue("New SOS received. Refreshing queue...");
+      },
+      error: (subscriptionError: unknown) => console.error("SOS subscription error", subscriptionError)
+    });
+
+    const unsubscribeUpdates = (client.graphql({
+      query: subscriptions.onSOSUpdate,
+      authMode: "userPool"
+    }) as any).subscribe({
+      next: () => {
+        void loadQueue("SOS update received. Refreshing queue...");
+      },
+      error: (subscriptionError: unknown) => console.error("SOS update subscription error", subscriptionError)
+    });
+
+    return () => {
+      active = false;
+      unsubscribeNew.unsubscribe();
+      unsubscribeUpdates.unsubscribe();
+    };
+  }, [hasAwsConfig]);
+
+  async function onAccept(signalId: string) {
+    if (!hasAwsConfig) {
+      setSignals((current) =>
+        sortSignals(
+          current.map((signal) =>
+            signal.id === signalId ? { ...signal, status: "assigned", assignedTo: "demo-ngo-user" } : signal
+          )
+        )
+      );
+      setLiveMessage("Demo mode: dispatch accepted locally.");
+      return;
+    }
+
+    configureAmplify();
+    const client = generateClient();
+
+    try {
+      setAcceptingId(signalId);
+      setError(null);
+
+      const result = await client.graphql({
+        query: mutations.acceptSOS,
+        authMode: "userPool",
+        variables: { id: signalId }
+      });
+
+      const updatedSignal = (result as any).data?.acceptSOS as SOSSignal | undefined;
+      if (!updatedSignal?.id) {
+        throw new Error("The backend did not return the updated SOS signal.");
+      }
+
+      setSignals((current) =>
+        sortSignals(current.map((signal) => (signal.id === signalId ? { ...signal, ...updatedSignal } : signal)))
+      );
+      setLiveMessage("Dispatch accepted and saved to the backend.");
+    } catch (acceptError) {
+      setError(acceptError instanceof Error ? acceptError.message : "Unable to accept the SOS dispatch.");
+    } finally {
+      setAcceptingId(null);
+    }
+  }
 
   return (
     <div className="space-y-6">
       <Card>
         <CardTitle>Live SOS queue</CardTitle>
         <CardDescription className="mt-2">
-          AppSync subscriptions push new emergencies here instantly so responders can claim them.
+          New emergencies are loaded from the database and refreshed through AppSync subscriptions.
         </CardDescription>
         <p className="mt-3 text-sm text-primary">{liveMessage}</p>
+        {error ? (
+          <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            {error}
+          </div>
+        ) : null}
         <div className="mt-6 space-y-4">
-          {mockSOSSignals.map((signal) => (
+          {signals.map((signal) => (
             <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5" key={signal.id}>
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
@@ -39,16 +178,40 @@ export default function NgoSOSQueuePage() {
                 </span>
               </div>
               <div className="mt-4 flex gap-3">
-                <Button onClick={() => setAccepted(signal.id)}>Accept dispatch</Button>
-                <Button variant="outline">View on map</Button>
+                <Button
+                  disabled={acceptingId === signal.id || (signal.status ?? "").toLowerCase() !== "pending"}
+                  onClick={() => void onAccept(signal.id)}
+                >
+                  {acceptingId === signal.id
+                    ? "Saving..."
+                    : (signal.status ?? "").toLowerCase() === "pending"
+                      ? "Accept dispatch"
+                      : "Already assigned"}
+                </Button>
+                <Link href="/ngo/map">
+                  <Button variant="outline">View on map</Button>
+                </Link>
               </div>
-              {accepted === signal.id ? (
-                <p className="mt-3 text-sm text-success">
-                  Dispatch accepted. In live mode `acceptSOS` updates the record and notifies the citizen immediately.
-                </p>
+              {signal.nearestResponders?.length ? (
+                <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                  <p className="text-sm font-medium text-white">Suggested responders</p>
+                  <div className="mt-3 space-y-2 text-sm text-slate-300">
+                    {signal.nearestResponders.map((responder) => (
+                      <div className="flex items-center justify-between gap-3" key={responder.id}>
+                        <span>{responder.fullName ?? responder.id}</span>
+                        <span>{responder.distance != null ? `${Math.round(responder.distance)} m` : "Nearby"}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               ) : null}
             </div>
           ))}
+          {!signals.length && !loading ? (
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-muted">
+              No live SOS signals were found in the database.
+            </div>
+          ) : null}
         </div>
       </Card>
     </div>
