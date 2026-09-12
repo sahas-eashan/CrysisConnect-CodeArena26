@@ -239,7 +239,7 @@ type Query {
   getNewsUpdates(disasterId: ID): [NewsUpdate!]!
   getOrganizations(status: String): [Organization!]!
   getDashboardStats: DashboardStats!
-  getCitizenGuidance(disasterId: ID): CitizenGuidance!
+  getCitizenGuidance(disasterId: ID): CitizenGuidance
   getAiAuditLogs(limit: Int): [AiAuditRef!]!
 }
 

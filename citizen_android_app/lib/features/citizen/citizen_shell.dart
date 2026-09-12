@@ -1,8 +1,10 @@
+import 'package:crisisconnect_citizen/app/app.dart';
 import 'package:crisisconnect_citizen/core/backend.dart';
 import 'package:crisisconnect_citizen/features/citizen/dashboard_screen.dart';
 import 'package:crisisconnect_citizen/features/citizen/map_screen.dart';
 import 'package:crisisconnect_citizen/features/citizen/resources_screen.dart';
 import 'package:crisisconnect_citizen/features/citizen/sos_screen.dart';
+import 'package:crisisconnect_citizen/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 
 class CitizenShell extends StatefulWidget {
@@ -23,6 +25,69 @@ class CitizenShell extends StatefulWidget {
 
 class _CitizenShellState extends State<CitizenShell> {
   int _currentIndex = 0;
+
+  void _showLanguagePicker(BuildContext context) {
+    final localeNotifier = CrisisConnectApp.localeOf(context);
+    final currentCode = localeNotifier.locale?.languageCode;
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetContext) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                AppLocalizations.of(context)!.selectLanguage,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+              const SizedBox(height: 16),
+              _LanguageTile(
+                flag: '🇬🇧',
+                title: 'English',
+                subtitle: 'English',
+                selected: currentCode == 'en' || currentCode == null,
+                onTap: () {
+                  localeNotifier.setLocale(const Locale('en'));
+                  Navigator.pop(sheetContext);
+                },
+              ),
+              const SizedBox(height: 8),
+              _LanguageTile(
+                flag: '🇱🇰',
+                title: 'සිංහල',
+                subtitle: 'Sinhala',
+                selected: currentCode == 'si',
+                onTap: () {
+                  localeNotifier.setLocale(const Locale('si'));
+                  Navigator.pop(sheetContext);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -86,7 +151,7 @@ class _CitizenShellState extends State<CitizenShell> {
                                 ),
                           ),
                           Text(
-                            widget.session.username ?? 'Citizen access',
+                            widget.session.username ?? AppLocalizations.of(context)!.citizenAccess,
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(color: AppColors.outline),
                           ),
@@ -97,12 +162,30 @@ class _CitizenShellState extends State<CitizenShell> {
                       onSelected: (value) async {
                         if (value == 'logout') {
                           await widget.onSignOut();
+                        } else if (value == 'language') {
+                          _showLanguagePicker(context);
                         }
                       },
-                      itemBuilder: (context) => const [
+                      itemBuilder: (ctx) => [
+                        PopupMenuItem<String>(
+                          value: 'language',
+                          child: Row(
+                            children: [
+                              const Icon(Icons.language_rounded, size: 20),
+                              const SizedBox(width: 8),
+                              Text(AppLocalizations.of(ctx)!.languageLabel),
+                            ],
+                          ),
+                        ),
                         PopupMenuItem<String>(
                           value: 'logout',
-                          child: Text('Sign out'),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.logout_rounded, size: 20),
+                              const SizedBox(width: 8),
+                              Text(AppLocalizations.of(ctx)!.signOut),
+                            ],
+                          ),
                         ),
                       ],
                       child: Container(
@@ -154,25 +237,25 @@ class _CitizenShellState extends State<CitizenShell> {
             children: [
               _NavButton(
                 icon: Icons.home_rounded,
-                label: 'Home',
+                label: AppLocalizations.of(context)!.navHome,
                 selected: _currentIndex == 0,
                 onTap: () => setState(() => _currentIndex = 0),
               ),
               _NavButton(
                 icon: Icons.explore_rounded,
-                label: 'Map',
+                label: AppLocalizations.of(context)!.navMap,
                 selected: _currentIndex == 1,
                 onTap: () => setState(() => _currentIndex = 1),
               ),
               _NavButton(
                 icon: Icons.emergency_rounded,
-                label: 'SOS',
+                label: AppLocalizations.of(context)!.navSos,
                 selected: _currentIndex == 2,
                 onTap: () => setState(() => _currentIndex = 2),
               ),
               _NavButton(
                 icon: Icons.inventory_2_rounded,
-                label: 'Resources',
+                label: AppLocalizations.of(context)!.navResources,
                 selected: _currentIndex == 3,
                 onTap: () => setState(() => _currentIndex = 3),
               ),
@@ -223,6 +306,72 @@ class _NavButton extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LanguageTile extends StatelessWidget {
+  const _LanguageTile({
+    required this.flag,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String flag;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.primary.withValues(alpha: 0.08)
+              : AppColors.surfaceLowest,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected ? AppColors.primary : Colors.grey.shade200,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Text(flag, style: const TextStyle(fontSize: 28)),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: selected ? AppColors.primary : null,
+                        ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.outline,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+            if (selected)
+              const Icon(Icons.check_circle_rounded,
+                  color: AppColors.primary, size: 24),
+          ],
         ),
       ),
     );

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:crisisconnect_citizen/core/backend.dart';
+import 'package:crisisconnect_citizen/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 
 class SosScreen extends StatefulWidget {
@@ -52,6 +53,7 @@ class _SosScreenState extends State<SosScreen> {
   }
 
   Future<void> _sendSos() async {
+    final l10n = AppLocalizations.of(context)!;
     try {
       final signal = await widget.repository.createSos(
         type: _selectedType,
@@ -65,9 +67,7 @@ class _SosScreenState extends State<SosScreen> {
         _liveSignals.insert(0, signal);
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('SOS sent. Responders have been notified.'),
-        ),
+        SnackBar(content: Text(l10n.sosSent)),
       );
     } catch (error) {
       if (!mounted) return;
@@ -104,8 +104,18 @@ class _SosScreenState extends State<SosScreen> {
     }
   }
 
+  List<_SosType> _localizedSosTypes(AppLocalizations l10n) => [
+    _SosType('medical', l10n.medical),
+    _SosType('trapped', l10n.trapped),
+    _SosType('evacuation', l10n.evacuation),
+    _SosType('resources', l10n.resourcesType),
+  ];
+
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final sosTypes = _localizedSosTypes(l10n);
+
     return RefreshIndicator(
       onRefresh: _refresh,
       child: FutureBuilder<SosBundle>(
@@ -122,7 +132,7 @@ class _SosScreenState extends State<SosScreen> {
                 const SizedBox(height: 120),
                 Text(snapshot.error.toString(), textAlign: TextAlign.center),
                 const SizedBox(height: 16),
-                FilledButton(onPressed: _refresh, child: const Text('Retry')),
+                FilledButton(onPressed: _refresh, child: Text(l10n.retry)),
               ],
             );
           }
@@ -149,8 +159,8 @@ class _SosScreenState extends State<SosScreen> {
                 ),
                 child: Text(
                   bundle.currentLocation == null
-                      ? 'Current location unavailable. Permission will be requested when you send SOS.'
-                      : 'Current location captured and ready for emergency dispatch.',
+                      ? l10n.locationUnavailable
+                      : l10n.locationReady,
                   textAlign: TextAlign.center,
                   style: Theme.of(
                     context,
@@ -182,19 +192,19 @@ class _SosScreenState extends State<SosScreen> {
                         ),
                       ],
                     ),
-                    child: const Column(
+                    child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.emergency_share_rounded,
                           size: 72,
                           color: Colors.white,
                         ),
-                        SizedBox(height: 10),
+                        const SizedBox(height: 10),
                         Text(
-                          'HOLD TO\nSEND SOS',
+                          l10n.holdToSendSos,
                           textAlign: TextAlign.center,
-                          style: TextStyle(
+                          style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w900,
                             fontSize: 28,
@@ -208,7 +218,7 @@ class _SosScreenState extends State<SosScreen> {
               ),
               const SizedBox(height: 18),
               Text(
-                'Press and hold for 3 seconds to send your location to the live CrisisConnect responder network.',
+                l10n.sosInstruction,
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: AppColors.surfaceVariantText,
@@ -216,7 +226,7 @@ class _SosScreenState extends State<SosScreen> {
               ),
               const SizedBox(height: 24),
               Text(
-                'Emergency Type',
+                l10n.emergencyType,
                 style: Theme.of(
                   context,
                 ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
@@ -225,7 +235,7 @@ class _SosScreenState extends State<SosScreen> {
               Wrap(
                 spacing: 10,
                 runSpacing: 10,
-                children: _sosTypes
+                children: sosTypes
                     .map(
                       (type) => ChoiceChip(
                         label: Text(type.label),
@@ -252,8 +262,8 @@ class _SosScreenState extends State<SosScreen> {
                 onChanged: (_) => setState(() => _preparedSos = null),
                 minLines: 3,
                 maxLines: 5,
-                decoration: const InputDecoration(
-                  labelText: 'Describe the situation',
+                decoration: InputDecoration(
+                  labelText: l10n.describeSituation,
                   alignLabelWithHint: true,
                 ),
               ),
@@ -270,7 +280,7 @@ class _SosScreenState extends State<SosScreen> {
               ],
               const SizedBox(height: 20),
               Text(
-                'My SOS Status',
+                l10n.mySosStatus,
                 style: Theme.of(
                   context,
                 ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
@@ -279,10 +289,7 @@ class _SosScreenState extends State<SosScreen> {
               if (latestSignal != null)
                 _ResponderStatusCard(signal: latestSignal),
               if (signals.isEmpty)
-                const _EmptyState(
-                  message:
-                      'Your SOS history will appear here after the first emergency request.',
-                )
+                _EmptyState(message: l10n.sosHistoryEmpty)
               else
                 ...signals.map(
                   (signal) => Padding(
@@ -305,6 +312,7 @@ class _ResponderStatusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final responder = signal.nearestResponders.isEmpty
         ? null
         : signal.nearestResponders.first;
@@ -332,7 +340,7 @@ class _ResponderStatusCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _statusHeadline(signal.status),
+                  _statusHeadline(signal.status, l10n),
                   style: Theme.of(context).textTheme.labelLarge?.copyWith(
                     color: AppColors.primary,
                     fontWeight: FontWeight.w800,
@@ -340,15 +348,14 @@ class _ResponderStatusCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  responder?.fullName ??
-                      'Awaiting nearest responder assignment',
+                  responder?.fullName ?? l10n.awaitingResponder,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w800,
                   ),
                 ),
                 if (responder?.distance != null)
                   Text(
-                    '${(responder!.distance! / 1000).toStringAsFixed(1)} km away',
+                    l10n.kmAway((responder!.distance! / 1000).toStringAsFixed(1)),
                     style: Theme.of(
                       context,
                     ).textTheme.bodySmall?.copyWith(color: AppColors.outline),
@@ -361,14 +368,14 @@ class _ResponderStatusCard extends StatelessWidget {
     );
   }
 
-  String _statusHeadline(String? status) {
+  String _statusHeadline(String? status, AppLocalizations l10n) {
     switch ((status ?? '').toLowerCase()) {
       case 'assigned':
-        return 'Help is on the way';
+        return l10n.helpOnTheWay;
       case 'resolved':
-        return 'Emergency closed';
+        return l10n.emergencyClosed;
       default:
-        return 'Awaiting dispatch';
+        return l10n.awaitingDispatch;
     }
   }
 }
@@ -418,6 +425,7 @@ class _SosTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -449,7 +457,7 @@ class _SosTile extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  signal.description ?? 'No description provided.',
+                  signal.description ?? l10n.noDescription,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: AppColors.surfaceVariantText,
                   ),
@@ -505,10 +513,3 @@ class _SosType {
   final String value;
   final String label;
 }
-
-const _sosTypes = [
-  _SosType('medical', 'Medical'),
-  _SosType('trapped', 'Trapped'),
-  _SosType('evacuation', 'Evacuation'),
-  _SosType('resources', 'Resources'),
-];

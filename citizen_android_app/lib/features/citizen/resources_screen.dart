@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:crisisconnect_citizen/core/backend.dart';
+import 'package:crisisconnect_citizen/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 
 class ResourcesScreen extends StatefulWidget {
@@ -67,6 +68,18 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
   }
 
   Future<void> _requestResource(ResourceItem resource) async {
+    await _showRequestDialog(
+      resourceName: resource.name,
+      resourceId: resource.id,
+      title: AppLocalizations.of(context)!.requestDialogTitle(resource.name),
+    );
+  }
+
+  Future<void> _requestCustomResource() async {
+    final l10n = AppLocalizations.of(context)!;
+    final nameController = TextEditingController(
+      text: _searchController.text.trim(),
+    );
     final quantityController = TextEditingController(text: '1');
     String urgency = 'normal';
 
@@ -76,44 +89,148 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
         return StatefulBuilder(
           builder: (context, setModalState) {
             return AlertDialog(
-              title: Text('Request ${resource.name}'),
+              title: Text(l10n.requestUnlistedItem),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   TextField(
+                    controller: nameController,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: InputDecoration(labelText: l10n.itemName),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
                     controller: quantityController,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Quantity needed',
-                    ),
+                    decoration: InputDecoration(labelText: l10n.quantityNeeded),
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     initialValue: urgency,
-                    items: const [
-                      DropdownMenuItem(value: 'normal', child: Text('Normal')),
-                      DropdownMenuItem(value: 'high', child: Text('High')),
+                    items: [
+                      DropdownMenuItem(
+                        value: 'normal',
+                        child: Text(l10n.urgencyNormal),
+                      ),
+                      DropdownMenuItem(
+                        value: 'high',
+                        child: Text(l10n.urgencyHigh),
+                      ),
                       DropdownMenuItem(
                         value: 'critical',
-                        child: Text('Critical'),
+                        child: Text(l10n.urgencyCritical),
                       ),
                     ],
                     onChanged: (value) {
                       if (value == null) return;
                       setModalState(() => urgency = value);
                     },
-                    decoration: const InputDecoration(labelText: 'Urgency'),
+                    decoration: InputDecoration(labelText: l10n.urgency),
                   ),
                 ],
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Cancel'),
+                  child: Text(l10n.cancelButton),
                 ),
                 FilledButton(
                   onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text('Submit'),
+                  child: Text(l10n.submitButton),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (confirmed != true) {
+      nameController.dispose();
+      quantityController.dispose();
+      return;
+    }
+
+    final resourceName = nameController.text.trim();
+    if (resourceName.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.itemNameRequired)));
+      }
+      nameController.dispose();
+      quantityController.dispose();
+      return;
+    }
+
+    await _submitResourceRequest(
+      resourceId: null,
+      resourceName: resourceName,
+      quantityNeeded: int.tryParse(quantityController.text) ?? 1,
+      urgency: urgency,
+    );
+
+    nameController.dispose();
+    quantityController.dispose();
+  }
+
+  Future<void> _showRequestDialog({
+    required String resourceName,
+    required String? resourceId,
+    required String title,
+  }) async {
+    final l10n = AppLocalizations.of(context)!;
+    final quantityController = TextEditingController(text: '1');
+    String urgency = 'normal';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return AlertDialog(
+              title: Text(title),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: quantityController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(labelText: l10n.quantityNeeded),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: urgency,
+                    items: [
+                      DropdownMenuItem(
+                        value: 'normal',
+                        child: Text(l10n.urgencyNormal),
+                      ),
+                      DropdownMenuItem(
+                        value: 'high',
+                        child: Text(l10n.urgencyHigh),
+                      ),
+                      DropdownMenuItem(
+                        value: 'critical',
+                        child: Text(l10n.urgencyCritical),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setModalState(() => urgency = value);
+                    },
+                    decoration: InputDecoration(labelText: l10n.urgency),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: Text(l10n.cancelButton),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: Text(l10n.submitButton),
                 ),
               ],
             );
@@ -127,11 +244,29 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
       return;
     }
 
+    await _submitResourceRequest(
+      resourceId: resourceId,
+      resourceName: resourceName,
+      quantityNeeded: int.tryParse(quantityController.text) ?? 1,
+      urgency: urgency,
+    );
+
+    quantityController.dispose();
+  }
+
+  Future<void> _submitResourceRequest({
+    required String? resourceId,
+    required String resourceName,
+    required int quantityNeeded,
+    required String urgency,
+  }) async {
+    final l10n = AppLocalizations.of(context)!;
+
     try {
       final request = await widget.repository.requestResource(
-        resourceId: resource.id,
-        resourceName: resource.name,
-        quantityNeeded: int.tryParse(quantityController.text) ?? 1,
+        resourceId: resourceId,
+        resourceName: resourceName,
+        quantityNeeded: quantityNeeded,
         urgency: urgency,
       );
       if (!mounted) return;
@@ -139,11 +274,9 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
         _liveRequests.removeWhere((item) => item.id == request.id);
         _liveRequests.insert(0, request);
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Resource request submitted successfully.'),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.resourceRequestSuccess)));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -151,13 +284,13 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
           content: Text(error.toString().replaceFirst('Exception: ', '')),
         ),
       );
-    } finally {
-      quantityController.dispose();
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
     return RefreshIndicator(
       onRefresh: _refresh,
       child: FutureBuilder<ResourcesBundle>(
@@ -174,7 +307,7 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
                 const SizedBox(height: 120),
                 Text(snapshot.error.toString(), textAlign: TextAlign.center),
                 const SizedBox(height: 16),
-                FilledButton(onPressed: _refresh, child: const Text('Retry')),
+                FilledButton(onPressed: _refresh, child: Text(l10n.retry)),
               ],
             );
           }
@@ -193,35 +326,44 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
             return matchesCategory && matchesSearch;
           }).toList();
 
+          final categories = [
+            ('All', l10n.categoryAll),
+            ('Food', l10n.categoryFood),
+            ('Water', l10n.categoryWater),
+            ('Medical', l10n.categoryMedical),
+            ('Shelter', l10n.categoryShelter),
+          ];
+
           return ListView(
             padding: const EdgeInsets.fromLTRB(20, 18, 20, 140),
             children: [
               TextField(
                 controller: _searchController,
                 onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  labelText: 'Search supplies',
-                  prefixIcon: Icon(Icons.search_rounded),
+                decoration: InputDecoration(
+                  labelText: l10n.searchSupplies,
+                  prefixIcon: const Icon(Icons.search_rounded),
                 ),
               ),
               const SizedBox(height: 12),
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
-                  children: ['All', 'Food', 'Water', 'Medical', 'Shelter']
+                  children: categories
                       .map(
-                        (item) => Padding(
+                        (entry) => Padding(
                           padding: const EdgeInsets.only(right: 8),
                           child: FilterChip(
-                            label: Text(item),
-                            selected: _category == item,
-                            onSelected: (_) => setState(() => _category = item),
+                            label: Text(entry.$2),
+                            selected: _category == entry.$1,
+                            onSelected: (_) =>
+                                setState(() => _category = entry.$1),
                             backgroundColor: AppColors.surfaceHighest,
                             selectedColor: AppColors.primary,
                             side: BorderSide.none,
                             showCheckmark: false,
                             labelStyle: TextStyle(
-                              color: _category == item
+                              color: _category == entry.$1
                                   ? Colors.white
                                   : AppColors.onSurface,
                               fontWeight: FontWeight.w700,
@@ -233,17 +375,51 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
                 ),
               ),
               const SizedBox(height: 18),
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceLow,
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            l10n.requestUnlistedItem,
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            l10n.requestUnlistedDescription,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: AppColors.surfaceVariantText),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    OutlinedButton.icon(
+                      onPressed: _requestCustomResource,
+                      icon: const Icon(Icons.add_circle_outline_rounded),
+                      label: Text(l10n.requestButton),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
               Text(
-                'Live Resource Catalog',
+                l10n.liveResourceCatalog,
                 style: Theme.of(
                   context,
                 ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 12),
               if (filteredResources.isEmpty)
-                const _EmptyState(
-                  message: 'No resources match your current filter.',
-                )
+                _EmptyState(message: l10n.noResourcesMatch)
               else
                 ...filteredResources.map(
                   (resource) => Padding(
@@ -256,17 +432,14 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
                 ),
               const SizedBox(height: 20),
               Text(
-                'My Active Requests',
+                l10n.myActiveRequests,
                 style: Theme.of(
                   context,
                 ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 12),
               if (requests.isEmpty)
-                const _EmptyState(
-                  message:
-                      'Your request history will appear here once you submit a resource request.',
-                )
+                _EmptyState(message: l10n.requestHistoryEmpty)
               else
                 ...requests.map(
                   (item) => Padding(
@@ -308,6 +481,7 @@ class _ResourceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -335,7 +509,7 @@ class _ResourceCard extends StatelessWidget {
                       [
                         if (resource.category != null) resource.category!,
                         if (resource.quantity != null)
-                          '${resource.quantity} ${resource.unit ?? 'units'}',
+                          '${resource.quantity} ${resource.unit ?? l10n.units}',
                       ].join(' • '),
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: AppColors.surfaceVariantText,
@@ -366,13 +540,16 @@ class _ResourceCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              FilledButton(onPressed: onRequest, child: const Text('Request')),
+              FilledButton(
+                onPressed: onRequest,
+                child: Text(l10n.requestButton),
+              ),
             ],
           ),
           if (resource.managedBy != null) ...[
             const SizedBox(height: 12),
             Text(
-              'Managed by ${resource.managedBy}',
+              l10n.managedBy(resource.managedBy!),
               style: Theme.of(
                 context,
               ).textTheme.bodySmall?.copyWith(color: AppColors.outline),
@@ -404,6 +581,7 @@ class _RequestTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final fulfilled = (request.status ?? '').toLowerCase() == 'fulfilled';
 
     return Container(
@@ -433,12 +611,12 @@ class _RequestTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  request.resourceName ?? 'Custom request',
+                  request.resourceName ?? l10n.customRequest,
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${request.quantityNeeded ?? 1} units • ${request.urgency ?? 'normal'} priority',
+                  '${request.quantityNeeded ?? 1} ${l10n.units} • ${request.urgency ?? 'normal'} ${l10n.priority}',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: AppColors.surfaceVariantText,
                   ),
