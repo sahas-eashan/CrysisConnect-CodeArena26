@@ -4,6 +4,7 @@ node_modules
 .env
 .env.local
 .env.*.local
+citizen_android_app/dart_defines.local.json
 dist
 coverage
 *.tfstate

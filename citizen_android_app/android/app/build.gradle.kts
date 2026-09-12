@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.compile.JavaCompile
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -41,4 +43,17 @@ android {
 
 flutter {
     source = "../.."
+}
+
+// amplify_db_common is Kotlin-only; ensure its classes exist before javac compiles
+// GeneratedPluginRegistrant.java (avoids intermittent "cannot find symbol AmplifyDbCommonPlugin").
+afterEvaluate {
+    tasks.withType<JavaCompile>().configureEach {
+        val match = Regex("^compile(.+)JavaWithJavac$").find(name) ?: return@configureEach
+        val variant = match.groupValues[1]
+        val kotlinCompile = rootProject.tasks.findByPath(":amplify_db_common:compile${variant}Kotlin")
+        if (kotlinCompile != null) {
+            dependsOn(kotlinCompile)
+        }
+    }
 }

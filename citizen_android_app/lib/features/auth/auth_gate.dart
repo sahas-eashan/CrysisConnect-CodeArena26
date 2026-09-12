@@ -99,7 +99,7 @@ class AuthScreen extends StatefulWidget {
   State<AuthScreen> createState() => _AuthScreenState();
 }
 
-enum _AuthMode { signIn, signUp, confirm }
+enum _AuthMode { signIn, signUp, confirm, newPassword }
 
 class _AuthScreenState extends State<AuthScreen> {
   _AuthMode _mode = _AuthMode.signIn;
@@ -113,6 +113,7 @@ class _AuthScreenState extends State<AuthScreen> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _codeController = TextEditingController();
+  final _newPasswordController = TextEditingController();
 
   @override
   void dispose() {
@@ -121,17 +122,43 @@ class _AuthScreenState extends State<AuthScreen> {
     _nameController.dispose();
     _phoneController.dispose();
     _codeController.dispose();
+    _newPasswordController.dispose();
     super.dispose();
   }
 
   Future<void> _handleSignIn() async {
-    await _run(() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+      _message = null;
+    });
+
+    try {
       final session = await widget.backend.signIn(
         username: _emailController.text.trim(),
         password: _passwordController.text,
       );
+      if (!mounted) return;
       widget.onSignedIn(session);
-    });
+    } on NewPasswordRequiredException catch (error) {
+      if (!mounted) return;
+      _newPasswordController.clear();
+      setState(() {
+        _mode = _AuthMode.newPassword;
+        _message = error.toString();
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error.toString().replaceFirst('Exception: ', '');
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
+    }
   }
 
   Future<void> _handleSignUp() async {
@@ -168,6 +195,15 @@ class _AuthScreenState extends State<AuthScreen> {
     });
   }
 
+  Future<void> _handleCompleteNewPassword() async {
+    await _run(() async {
+      final session = await widget.backend.completeNewPassword(
+        newPassword: _newPasswordController.text,
+      );
+      widget.onSignedIn(session);
+    });
+  }
+
   Future<void> _run(Future<void> Function() action) async {
     setState(() {
       _busy = true;
@@ -197,6 +233,7 @@ class _AuthScreenState extends State<AuthScreen> {
       _AuthMode.signIn => 'Citizen Sign In',
       _AuthMode.signUp => 'Create Citizen Account',
       _AuthMode.confirm => 'Confirm Registration',
+      _AuthMode.newPassword => 'Set A New Password',
     };
 
     final description = switch (_mode) {
@@ -206,6 +243,8 @@ class _AuthScreenState extends State<AuthScreen> {
         'Citizens can self-register with email. After confirmation, the mobile app uses the same AWS backend as the web portal.',
       _AuthMode.confirm =>
         'Enter the confirmation code sent by Cognito, then sign in to start using live disaster data.',
+      _AuthMode.newPassword =>
+        'This Cognito account was created with a temporary password. Set a permanent password to finish the first sign-in.',
     };
 
     return Scaffold(
@@ -272,7 +311,8 @@ class _AuthScreenState extends State<AuthScreen> {
                       ),
                       const SizedBox(height: 12),
                     ],
-                    if (_mode != _AuthMode.confirm) ...[
+                    if (_mode != _AuthMode.confirm &&
+                        _mode != _AuthMode.newPassword) ...[
                       TextField(
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
@@ -303,6 +343,15 @@ class _AuthScreenState extends State<AuthScreen> {
                           prefixIcon: Icon(Icons.verified_outlined),
                         ),
                       )
+                    else if (_mode == _AuthMode.newPassword)
+                      TextField(
+                        controller: _newPasswordController,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: 'New password',
+                          prefixIcon: Icon(Icons.lock_reset_rounded),
+                        ),
+                      )
                     else
                       TextField(
                         controller: _passwordController,
@@ -322,6 +371,8 @@ class _AuthScreenState extends State<AuthScreen> {
                                 _AuthMode.signIn => _handleSignIn,
                                 _AuthMode.signUp => _handleSignUp,
                                 _AuthMode.confirm => _handleConfirm,
+                                _AuthMode.newPassword =>
+                                  _handleCompleteNewPassword,
                               },
                         child: Text(
                           _busy
@@ -330,6 +381,7 @@ class _AuthScreenState extends State<AuthScreen> {
                                   _AuthMode.signIn => 'Sign in',
                                   _AuthMode.signUp => 'Create account',
                                   _AuthMode.confirm => 'Confirm registration',
+                                  _AuthMode.newPassword => 'Save new password',
                                 },
                         ),
                       ),
@@ -360,7 +412,11 @@ class _AuthScreenState extends State<AuthScreen> {
                                   _error = null;
                                   _message = null;
                                 }),
-                          child: const Text('Back to sign in'),
+                          child: Text(
+                            _mode == _AuthMode.newPassword
+                                ? 'Start sign in again'
+                                : 'Back to sign in',
+                          ),
                         ),
                       ),
                     if (_message != null) ...[

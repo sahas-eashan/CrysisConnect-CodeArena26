@@ -5,10 +5,18 @@ import 'dart:ui';
 import 'package:amplify_api/amplify_api.dart';
 import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
 import 'package:amplify_flutter/amplify_flutter.dart';
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
 class AppConfig {
+  const AppConfig.empty()
+    : awsRegion = '',
+      userPoolId = '',
+      userPoolClientId = '',
+      graphqlUrl = '',
+      apiName = 'data';
+
   const AppConfig._({
     required this.awsRegion,
     required this.userPoolId,
@@ -30,6 +38,43 @@ class AppConfig {
         defaultValue: 'data',
       ),
     );
+  }
+
+  factory AppConfig.fromJson(Map<String, dynamic> json) {
+    String readString(String key, [String fallback = '']) {
+      final value = json[key];
+      return value is String ? value : fallback;
+    }
+
+    return AppConfig._(
+      awsRegion: readString('CRISIS_AWS_REGION'),
+      userPoolId: readString('CRISIS_COGNITO_USER_POOL_ID'),
+      userPoolClientId: readString('CRISIS_COGNITO_USER_POOL_CLIENT_ID'),
+      graphqlUrl: readString('CRISIS_APPSYNC_GRAPHQL_URL'),
+      apiName: readString('CRISIS_APPSYNC_API_NAME', 'data'),
+    );
+  }
+
+  static Future<AppConfig> load() async {
+    final envConfig = AppConfig.fromEnvironment();
+    if (envConfig.isConfigured) return envConfig;
+
+    try {
+      final raw = await rootBundle.loadString(
+        'assets/config/runtime_config.json',
+      );
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        final assetConfig = AppConfig.fromJson(decoded);
+        if (assetConfig.isConfigured) {
+          return assetConfig;
+        }
+      }
+    } catch (_) {
+      // Fall back to the empty config so the app can still show the guidance UI.
+    }
+
+    return envConfig;
   }
 
   final String awsRegion;
@@ -80,6 +125,15 @@ class AppSession {
   final String? userId;
   final String? username;
   final List<String> groups;
+}
+
+class NewPasswordRequiredException implements Exception {
+  const NewPasswordRequiredException();
+
+  @override
+  String toString() {
+    return 'A new password is required to complete the first sign-in for this account.';
+  }
 }
 
 class DashboardBundle {
@@ -726,11 +780,15 @@ class AmplifyBackend {
 
   static final AmplifyBackend instance = AmplifyBackend._();
 
-  final AppConfig config = AppConfig.fromEnvironment();
+  AppConfig config = const AppConfig.empty();
   final AmplifyAuthCognito _auth = AmplifyAuthCognito();
   final AmplifyAPI _api = AmplifyAPI();
 
   bool _configured = false;
+
+  Future<void> initialize() async {
+    config = await AppConfig.load();
+  }
 
   Future<void> configure() async {
     if (!config.isConfigured || _configured) return;
@@ -778,7 +836,7 @@ class AmplifyBackend {
     required String password,
   }) async {
     await configure();
-    await Amplify.Auth.signIn(
+    final result = await Amplify.Auth.signIn(
       username: username,
       password: password,
       options: const SignInOptions(
@@ -787,6 +845,36 @@ class AmplifyBackend {
         ),
       ),
     );
+
+    if (!result.isSignedIn &&
+        result.nextStep.signInStep ==
+            AuthSignInStep.confirmSignInWithNewPassword) {
+      throw const NewPasswordRequiredException();
+    }
+
+    if (!result.isSignedIn &&
+        result.nextStep.signInStep != AuthSignInStep.done) {
+      throw Exception(
+        'Cognito returned an unsupported sign-in step: ${result.nextStep.signInStep.name}.',
+      );
+    }
+
+    return restoreSession();
+  }
+
+  Future<AppSession> completeNewPassword({required String newPassword}) async {
+    await configure();
+    final result = await Amplify.Auth.confirmSignIn(
+      confirmationValue: newPassword,
+    );
+
+    if (!result.isSignedIn &&
+        result.nextStep.signInStep != AuthSignInStep.done) {
+      throw Exception(
+        'Cognito returned an unsupported sign-in step: ${result.nextStep.signInStep.name}.',
+      );
+    }
+
     return restoreSession();
   }
 
