@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CrisisConnect - SOS Emergency</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "surface-container": "#e3f0f8",
+            "on-tertiary-fixed": "#002204",
+            "surface-container-high": "#ddeaf2",
+            "on-tertiary-fixed-variant": "#005313",
+            "background": "#f4faff",
+            "primary-fixed": "#d3e4ff",
+            "on-tertiary-container": "#f7fff1",
+            "outline": "#707783",
+            "tertiary-container": "#268630",
+            "secondary-fixed-dim": "#ffb4ac",
+            "surface-container-low": "#e9f6fd",
+            "on-background": "#111d23",
+            "secondary-container": "#db322f",
+            "on-error": "#ffffff",
+            "tertiary": "#006b1b",
+            "tertiary-fixed": "#98f994",
+            "on-primary": "#ffffff",
+            "error-container": "#ffdad6",
+            "on-surface-variant": "#404752",
+            "surface-container-highest": "#d7e4ec",
+            "on-primary-fixed": "#001c38",
+            "on-tertiary": "#ffffff",
+            "secondary": "#b7131a",
+            "surface-dim": "#cfdce4",
+            "surface": "#f4faff",
+            "on-secondary-fixed-variant": "#93000d",
+            "on-secondary-fixed": "#410002",
+            "on-primary-fixed-variant": "#004881",
+            "inverse-on-surface": "#e6f3fb",
+            "error": "#ba1a1a",
+            "on-secondary-container": "#fffbff",
+            "surface-container-lowest": "#ffffff",
+            "on-surface": "#111d23",
+            "tertiary-fixed-dim": "#7ddc7a",
+            "surface-bright": "#f4faff",
+            "surface-tint": "#0060a8",
+            "on-error-container": "#93000a",
+            "secondary-fixed": "#ffdad6",
+            "inverse-primary": "#a2c9ff",
+            "surface-variant": "#d7e4ec",
+            "on-secondary": "#ffffff",
+            "primary": "#005ea4",
+            "primary-fixed-dim": "#a2c9ff",
+            "inverse-surface": "#263238",
+            "on-primary-container": "#fdfcff",
+            "outline-variant": "#c0c7d4",
+            "primary-container": "#0077ce"
+          },
+          fontFamily: {
+            "headline": ["Inter"],
+            "body": ["Inter"],
+            "label": ["Inter"]
+          },
+          borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    .pulsate-emergency {
+      box-shadow: 0 0 0 0 rgba(183, 19, 26, 0.7);
+      animation: pulsate 2s infinite;
+    }
+    @keyframes pulsate {
+      0% { box-shadow: 0 0 0 0 rgba(183, 19, 26, 0.7); }
+      70% { box-shadow: 0 0 0 40px rgba(183, 19, 26, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(183, 19, 26, 0); }
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body min-h-screen flex flex-col">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center w-full px-5 py-3 sticky top-0 z-50 bg-[#e9f6fd] dark:bg-slate-900 transition-all duration-200">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[#005EA4] dark:text-blue-400" data-icon="shield">shield</span>
+<h1 class="text-xl font-bold tracking-tight text-[#005EA4] dark:text-blue-400 font-headline">CrisisConnect</h1>
+</div>
+<button class="material-symbols-outlined text-slate-500 hover:bg-slate-200/50 p-2 rounded-full transition-all active:scale-95" data-icon="notifications">notifications</button>
+</header>
+<main class="flex-1 flex flex-col items-center px-6 pt-4 pb-32">
+<!-- GPS Status Indicator -->
+<div class="w-full max-w-md bg-surface-container-low rounded-full px-4 py-2 flex items-center justify-center gap-2 mb-8">
+<span class="material-symbols-outlined text-tertiary text-sm" data-icon="location_on" style="font-variation-settings: 'FILL' 1;">location_on</span>
+<span class="text-on-surface text-sm font-medium tracking-tight">Location: Captured (Colombo 07)</span>
+<div class="w-2 h-2 rounded-full bg-tertiary"></div>
+</div>
+<!-- SOS Hero Section -->
+<div class="flex-1 flex flex-col items-center justify-center w-full max-w-md">
+<p class="text-on-surface-variant font-medium mb-6 tracking-wide text-center uppercase text-xs">Press and hold for 3 seconds</p>
+<div class="relative flex items-center justify-center">
+<!-- Pulse ring effects -->
+<div class="absolute w-72 h-72 rounded-full border-2 border-secondary/20 animate-ping"></div>
+<button class="pulsate-emergency w-64 h-64 rounded-full bg-gradient-to-br from-secondary to-secondary-container flex flex-col items-center justify-center text-white shadow-2xl active:scale-90 transition-transform duration-300">
+<span class="material-symbols-outlined text-6xl mb-2" data-icon="emergency_share" style="font-variation-settings: 'FILL' 1;">emergency_share</span>
+<span class="text-3xl font-black tracking-tighter uppercase font-headline">SEND SOS</span>
+</button>
+</div>
+<p class="mt-10 text-on-surface-variant text-center leading-relaxed max-w-[280px]">
+        Emergency services and your contacts will be notified immediately.
+      </p>
+</div>
+<!-- Triage Selection Grid -->
+<div class="w-full max-w-md mt-12">
+<h2 class="text-label-md font-bold text-on-surface-variant uppercase tracking-widest mb-4 text-center">Select Emergency Type</h2>
+<div class="grid grid-cols-2 gap-3.5">
+<button class="flex flex-col items-center justify-center p-5 bg-surface-container-lowest rounded-full shadow-sm hover:bg-primary-fixed transition-colors active:scale-95">
+<span class="material-symbols-outlined text-secondary text-3xl mb-1" data-icon="medical_services">medical_services</span>
+<span class="text-sm font-semibold">Medical</span>
+</button>
+<button class="flex flex-col items-center justify-center p-5 bg-surface-container-lowest rounded-full shadow-sm hover:bg-primary-fixed transition-colors active:scale-95">
+<span class="material-symbols-outlined text-primary text-3xl mb-1" data-icon="door_front">door_front</span>
+<span class="text-sm font-semibold">Trapped</span>
+</button>
+<button class="flex flex-col items-center justify-center p-5 bg-surface-container-lowest rounded-full shadow-sm hover:bg-primary-fixed transition-colors active:scale-95">
+<span class="material-symbols-outlined text-tertiary text-3xl mb-1" data-icon="directions_run">directions_run</span>
+<span class="text-sm font-semibold">Evacuation</span>
+</button>
+<button class="flex flex-col items-center justify-center p-5 bg-surface-container-lowest rounded-full shadow-sm hover:bg-primary-fixed transition-colors active:scale-95">
+<span class="material-symbols-outlined text-on-surface-variant text-3xl mb-1" data-icon="inventory_2">inventory_2</span>
+<span class="text-sm font-semibold">Resources</span>
+</button>
+</div>
+</div>
+<!-- Active Responder View (Hidden until SOS sent) -->
+<div class="mt-8 w-full max-w-md bg-surface-container-highest rounded-full p-4 flex items-center gap-4 border border-outline-variant/20 hidden">
+<div class="w-14 h-14 rounded-full overflow-hidden bg-surface-container">
+<img alt="Responder Avatar" class="w-full h-full object-cover" data-alt="portrait of a professional paramedic in uniform with a reassuring expression and clear eye contact" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDC7cz7NuMSCI2Y-aHBWGZOvPXMcnQpE0ZmX0UEHhTT4uNK1-kPOmnQ-548Ya4l7NRg3FxStaE1vSB_5X67WJWriEBXoBN6d2vd49fvKsV8AK21xU5R8Q3T2rnWYHIxDXv8at8FMc2xyIbBAMm5sJcKxmVgQC4gVPRHbohhqGK762CPPO9rgGY95wvve03nt21ZchOJ63tskan_nZpmHcQygJcaNKHMpWaaTQvyugBKHvILXUPg5piropvck8BfDibgWj3tQcoksc4Z"/>
+</div>
+<div class="flex-1">
+<p class="text-xs font-bold uppercase tracking-widest text-primary">Help is on the way</p>
+<h3 class="text-lg font-bold">Officer Miller</h3>
+<p class="text-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-sm" data-icon="schedule">schedule</span> ETA: 4 Minutes
+        </p>
+</div>
+<button class="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-white">
+<span class="material-symbols-outlined" data-icon="call">call</span>
+</button>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-6 pt-3 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-t border-slate-100 dark:border-slate-800 shadow-[0_-4px_24px_rgba(0,0,0,0.06)]">
+<!-- Home Tab -->
+<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 px-4 py-2 hover:text-[#005EA4] transition-transform duration-200 active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-['Inter'] text-[11px] font-bold uppercase tracking-wider mt-1">Home</span>
+</a>
+<!-- Map Tab -->
+<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 px-4 py-2 hover:text-[#005EA4] transition-transform duration-200 active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="explore_speedometer">explore</span>
+<span class="font-['Inter'] text-[11px] font-bold uppercase tracking-wider mt-1">Map</span>
+</a>
+<!-- SOS Tab (Active) -->
+<a class="flex flex-col items-center justify-center bg-[#005EA4] text-white rounded-2xl px-6 py-2 transition-transform duration-200 active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="emergency" style="font-variation-settings: 'FILL' 1;">emergency</span>
+<span class="font-['Inter'] text-[11px] font-bold uppercase tracking-wider mt-1">SOS</span>
+</a>
+<!-- Resources Tab -->
+<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 px-4 py-2 hover:text-[#005EA4] transition-transform duration-200 active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="inventory_2">inventory_2</span>
+<span class="font-['Inter'] text-[11px] font-bold uppercase tracking-wider mt-1">Resources</span>
+</a>
+</nav>
+</body></html>

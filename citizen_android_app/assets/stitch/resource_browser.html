@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CrisisConnect - Resource Browser</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "surface-container": "#e3f0f8",
+                        "on-tertiary-fixed": "#002204",
+                        "surface-container-high": "#ddeaf2",
+                        "on-tertiary-fixed-variant": "#005313",
+                        "background": "#f4faff",
+                        "primary-fixed": "#d3e4ff",
+                        "on-tertiary-container": "#f7fff1",
+                        "outline": "#707783",
+                        "tertiary-container": "#268630",
+                        "secondary-fixed-dim": "#ffb4ac",
+                        "surface-container-low": "#e9f6fd",
+                        "on-background": "#111d23",
+                        "secondary-container": "#db322f",
+                        "on-error": "#ffffff",
+                        "tertiary": "#006b1b",
+                        "tertiary-fixed": "#98f994",
+                        "on-primary": "#ffffff",
+                        "error-container": "#ffdad6",
+                        "on-surface-variant": "#404752",
+                        "surface-container-highest": "#d7e4ec",
+                        "on-primary-fixed": "#001c38",
+                        "on-tertiary": "#ffffff",
+                        "secondary": "#b7131a",
+                        "surface-dim": "#cfdce4",
+                        "surface": "#f4faff",
+                        "on-secondary-fixed-variant": "#93000d",
+                        "on-secondary-fixed": "#410002",
+                        "on-primary-fixed-variant": "#004881",
+                        "inverse-on-surface": "#e6f3fb",
+                        "error": "#ba1a1a",
+                        "on-secondary-container": "#fffbff",
+                        "surface-container-lowest": "#ffffff",
+                        "on-surface": "#111d23",
+                        "tertiary-fixed-dim": "#7ddc7a",
+                        "surface-bright": "#f4faff",
+                        "surface-tint": "#0060a8",
+                        "on-error-container": "#93000a",
+                        "secondary-fixed": "#ffdad6",
+                        "inverse-primary": "#a2c9ff",
+                        "surface-variant": "#d7e4ec",
+                        "on-secondary": "#ffffff",
+                        "primary": "#005ea4",
+                        "primary-fixed-dim": "#a2c9ff",
+                        "inverse-surface": "#263238",
+                        "on-primary-container": "#fdfcff",
+                        "outline-variant": "#c0c7d4",
+                        "primary-container": "#0077ce"
+                    },
+                    fontFamily: {
+                        "headline": ["Inter"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen flex flex-col">
+<!-- TopAppBar from JSON -->
+<header class="bg-[#e9f6fd] dark:bg-slate-900 flex justify-between items-center w-full px-5 py-3 sticky top-0 z-50 transition-all duration-200">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[#005EA4] dark:text-blue-400" data-icon="shield">shield</span>
+<h1 class="text-xl font-bold tracking-tight text-[#005EA4] dark:text-blue-400">CrisisConnect</h1>
+</div>
+<div class="flex items-center gap-4">
+<button class="transition-all duration-200 active:scale-95 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 p-2 rounded-full">
+<span class="material-symbols-outlined text-[#005EA4] dark:text-blue-400" data-icon="notifications">notifications</span>
+</button>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 px-4 pt-6 pb-32 max-w-5xl mx-auto w-full">
+<!-- Search and Tactical Filter Bar -->
+<section class="mb-8 space-y-6">
+<div class="relative group">
+<div class="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-outline" data-icon="search">search</span>
+</div>
+<input class="w-full h-14 pl-12 pr-4 bg-surface-container-high border-none rounded-full focus:ring-2 focus:ring-primary text-body-lg placeholder-outline-variant transition-all" placeholder="Search Food, Water, Medicine..." type="text"/>
+</div>
+<!-- Category Tabs: Intentional Asymmetry -->
+<div class="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+<button class="px-6 py-2 bg-primary text-white rounded-full font-bold text-sm whitespace-nowrap shadow-md">All</button>
+<button class="px-6 py-2 bg-surface-container-highest text-on-surface rounded-full font-bold text-sm whitespace-nowrap hover:bg-surface-container-high transition-colors">Food</button>
+<button class="px-6 py-2 bg-surface-container-highest text-on-surface rounded-full font-bold text-sm whitespace-nowrap hover:bg-surface-container-high transition-colors">Water</button>
+<button class="px-6 py-2 bg-surface-container-highest text-on-surface rounded-full font-bold text-sm whitespace-nowrap hover:bg-surface-container-high transition-colors">Medical</button>
+<button class="px-6 py-2 bg-surface-container-highest text-on-surface rounded-full font-bold text-sm whitespace-nowrap hover:bg-surface-container-high transition-colors">Shelter</button>
+</div>
+</section>
+<!-- Resources Grid: Bento Style -->
+<section class="grid grid-cols-1 md:grid-cols-2 gap-5">
+<!-- Resource Card 1 -->
+<div class="bg-surface-container-lowest rounded-full p-1 flex flex-col transition-all hover:translate-y-[-2px]">
+<div class="relative h-48 w-full overflow-hidden rounded-t-[1.75rem]">
+<img class="w-full h-full object-cover" data-alt="stacks of sealed emergency food ration boxes in a clean warehouse with bright industrial lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAMCTzzXZ0hz9dhgDD4X4XWNS6Y7zvoW3ZwoQr5UUGRVVHZYkRTsov5c-AHE3dUD5t4bR6aJGZBKAs7S_54llwrJf_Cz8QCrTvsSJaeh75iBXDegkPZZpWycQdGkVmakhstbZR8Dik7nWBQ5hXgftrx8qwNwNne81dnMmWwSnuJYYTURidyn_MI3DRHyokkH2uDv7_AM85BaKKvvEeYowAehVJLCV6MLMF8LwPzQJRVff5uxGsdDrwi3DSxNjdPAUh2-K-I40CNwDrA"/>
+<div class="absolute top-4 left-4 bg-tertiary-container text-on-tertiary-container px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest">
+                        Available
+                    </div>
+</div>
+<div class="p-6 flex-1 flex flex-col">
+<div class="flex justify-between items-start mb-2">
+<h3 class="text-title-lg font-bold text-on-surface leading-tight">Emergency Ration Packs</h3>
+<span class="text-primary font-bold text-sm">0.8 km</span>
+</div>
+<p class="text-on-surface-variant text-body-md mb-4 flex items-center gap-1">
+<span class="material-symbols-outlined text-[18px]" data-icon="inventory_2">inventory_2</span>
+                        450 units remaining
+                    </p>
+<div class="mt-auto flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center">
+<span class="material-symbols-outlined text-sm" data-icon="corporate_fare">corporate_fare</span>
+</div>
+<span class="text-sm font-semibold text-outline">Red Cross</span>
+</div>
+<button class="bg-primary text-white px-5 py-3 rounded-full font-bold text-sm transition-all active:scale-95 shadow-lg shadow-primary/20">
+                            Request Resource
+                        </button>
+</div>
+</div>
+</div>
+<!-- Resource Card 2 -->
+<div class="bg-surface-container-lowest rounded-full p-1 flex flex-col transition-all hover:translate-y-[-2px]">
+<div class="relative h-48 w-full overflow-hidden rounded-t-[1.75rem]">
+<img class="w-full h-full object-cover" data-alt="rows of fresh bottled water pallets under a white distribution tent with natural outdoor lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB43XRtecvVLPWaJRX3oFe_8bVczyGE9sfPvz9n0JBiiozh5M6YcqjE0YvHKoI1N6RrcWLmM36v-3bIbAdOYYkOPYFNun11wqnvRv0ajG60qGl2Cc1dQ5wxVSSWxk0DlboXwefJdpmv_SDzl_KjPbBlQ65KwBiHljehcuIXY_leTYji6N7vX-AMnLXXmNwDlGx8VFmh6nZErwCFHHfv8FalzxcWOr2eFVQy4n-SMM6DfQxQsZc6vELbuygkbFCa_E9PBydHXeutspDT"/>
+<div class="absolute top-4 left-4 bg-secondary-container text-on-secondary-container px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest">
+                        Low Stock
+                    </div>
+</div>
+<div class="p-6 flex-1 flex flex-col">
+<div class="flex justify-between items-start mb-2">
+<h3 class="text-title-lg font-bold text-on-surface leading-tight">Potable Water (5L)</h3>
+<span class="text-primary font-bold text-sm">2.4 km</span>
+</div>
+<p class="text-on-surface-variant text-body-md mb-4 flex items-center gap-1">
+<span class="material-symbols-outlined text-[18px]" data-icon="water_drop">water_drop</span>
+                        12 units remaining
+                    </p>
+<div class="mt-auto flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center">
+<span class="material-symbols-outlined text-sm" data-icon="health_and_safety">health_and_safety</span>
+</div>
+<span class="text-sm font-semibold text-outline">Local Guard</span>
+</div>
+<button class="bg-primary text-white px-5 py-3 rounded-full font-bold text-sm transition-all active:scale-95 shadow-lg shadow-primary/20">
+                            Request Resource
+                        </button>
+</div>
+</div>
+</div>
+<!-- Resource Card 3 (Medical) -->
+<div class="bg-surface-container-lowest rounded-full p-1 flex flex-col transition-all hover:translate-y-[-2px] md:col-span-2 lg:col-span-1">
+<div class="relative h-48 w-full overflow-hidden rounded-t-[1.75rem]">
+<img class="w-full h-full object-cover" data-alt="professional medical first aid kit open showing bandages and antiseptic on a clean surface" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCLo3ZpIIzZstNhpC1A_huScey8Xz79wkw0iVVEdae_mxoTcQ7vWQLK6Jsms7NxPg-aYQnafUrqMB2HFr91JE5zTfw2UzSGXRJiO0KykKggTCST2cTOZ-1pl6MWqWe3tn40wHoh2zDNqSap0FdA1iUcXqHuEVj4IUR84o_sqBEU5zcwL-5vT5Rk77tg79FkIxcty-Ysn3vz_gArF7tc1OiikQlXi8oPqRp5c1rlEsihYk7CLoZtJZBo0Qdprzl7yKHkXa5Uom91RwMs"/>
+<div class="absolute top-4 left-4 bg-tertiary-container text-on-tertiary-container px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest">
+                        Available
+                    </div>
+</div>
+<div class="p-6 flex-1 flex flex-col">
+<div class="flex justify-between items-start mb-2">
+<h3 class="text-title-lg font-bold text-on-surface leading-tight">First Aid Trauma Kits</h3>
+<span class="text-primary font-bold text-sm">1.1 km</span>
+</div>
+<p class="text-on-surface-variant text-body-md mb-4 flex items-center gap-1">
+<span class="material-symbols-outlined text-[18px]" data-icon="medical_services">medical_services</span>
+                        80 kits available
+                    </p>
+<div class="mt-auto flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center">
+<span class="material-symbols-outlined text-sm" data-icon="medical_information">medical_information</span>
+</div>
+<span class="text-sm font-semibold text-outline">Doctors Without Borders</span>
+</div>
+<button class="bg-primary text-white px-5 py-3 rounded-full font-bold text-sm transition-all active:scale-95 shadow-lg shadow-primary/20">
+                            Request Resource
+                        </button>
+</div>
+</div>
+</div>
+</section>
+<!-- Active Requests Tab Section -->
+<section class="mt-12">
+<h2 class="text-headline-sm font-bold text-on-surface mb-4">My Active Requests</h2>
+<div class="bg-surface-container-low rounded-full overflow-hidden">
+<div class="flex items-center p-4 bg-surface-container-lowest border-l-4 border-primary mx-1 my-1 rounded-full">
+<div class="w-12 h-12 bg-primary-fixed rounded-full flex items-center justify-center mr-4">
+<span class="material-symbols-outlined text-primary" data-icon="medication">medication</span>
+</div>
+<div class="flex-1">
+<h4 class="font-bold text-on-surface">Insulin Supplies</h4>
+<p class="text-xs text-outline">Requested 2h ago • Pending Approval</p>
+</div>
+<span class="material-symbols-outlined text-outline" data-icon="chevron_right">chevron_right</span>
+</div>
+<div class="flex items-center p-4 bg-surface-container-lowest border-l-4 border-tertiary mx-1 my-1 rounded-full opacity-70">
+<div class="w-12 h-12 bg-tertiary-fixed rounded-full flex items-center justify-center mr-4">
+<span class="material-symbols-outlined text-tertiary" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<div class="flex-1">
+<h4 class="font-bold text-on-surface">Thermal Blankets (x2)</h4>
+<p class="text-xs text-tertiary">Ready for Pickup at Station A</p>
+</div>
+<span class="material-symbols-outlined text-outline" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar from JSON -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-6 pt-3 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-t border-slate-100 dark:border-slate-800 shadow-[0_-4px_24px_rgba(0,0,0,0.06)] rounded-t-3xl">
+<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 px-4 py-2 transition-transform duration-200 active:scale-90 hover:text-[#005EA4]" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="home">home</span>
+<span class="font-['Inter'] text-[11px] font-bold uppercase tracking-wider">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 px-4 py-2 transition-transform duration-200 active:scale-90 hover:text-[#005EA4]" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="explore_speedometer">explore</span>
+<span class="font-['Inter'] text-[11px] font-bold uppercase tracking-wider">Map</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 px-4 py-2 transition-transform duration-200 active:scale-90 hover:text-[#005EA4]" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="emergency">emergency</span>
+<span class="font-['Inter'] text-[11px] font-bold uppercase tracking-wider">SOS</span>
+</a>
+<!-- ACTIVE TAB: Resources -->
+<a class="flex flex-col items-center justify-center bg-[#005EA4] text-white rounded-2xl px-6 py-2 transition-transform duration-200 active:scale-90" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="inventory_2" style="font-variation-settings: 'FILL' 1;">inventory_2</span>
+<span class="font-['Inter'] text-[11px] font-bold uppercase tracking-wider">Resources</span>
+</a>
+</nav>
+</body></html>
