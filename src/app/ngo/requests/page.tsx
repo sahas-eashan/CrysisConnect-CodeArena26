@@ -36,6 +36,7 @@ export default function NgoRequestsPage() {
   const [loading, setLoading] = useState(Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL));
   const [fulfillingId, setFulfillingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [messageTone, setMessageTone] = useState<"success" | "warning">("success");
 
   useEffect(() => {
     if (!hasAwsConfig) return;
@@ -160,6 +161,7 @@ export default function NgoRequestsPage() {
         current.map((request) => (request.id === id ? { ...request, status: "fulfilled" } : request))
       );
       setMessage("Demo mode: request marked as fulfilled.");
+      setMessageTone("success");
       setError(null);
       return;
     }
@@ -171,6 +173,7 @@ export default function NgoRequestsPage() {
       setFulfillingId(id);
       setError(null);
       setMessage(null);
+      setMessageTone("success");
 
       const result = await client.graphql({
         query: mutations.fulfillResourceRequest,
@@ -189,17 +192,21 @@ export default function NgoRequestsPage() {
       });
       setResources((((refreshedResources as any).data?.getResources ?? []) as Resource[]));
 
-      if (!matchingResource) {
-        setMessage("Warning: no resources available in inventory. Request marked as fulfilled.");
-      } else if (availableAmount >= requestedAmount) {
+      const nextStatus = (updatedRequest?.status ?? request?.status ?? "pending").toLowerCase();
+
+      if (nextStatus === "fulfilled") {
         setMessage("Request marked as fulfilled and inventory updated.");
+        setMessageTone("success");
+      } else if (nextStatus === "partially_fulfilled") {
+        const remainingAmount = updatedRequest?.quantityNeeded ?? Math.max(requestedAmount - availableAmount, 0);
+        setMessage(`Partially fulfilled. Remaining request amount: ${remainingAmount}.`);
+        setMessageTone("warning");
       } else {
-        setMessage(
-          `Inventory exhausted. Remaining request amount: ${updatedRequest?.quantityNeeded ?? Math.max(requestedAmount - availableAmount, 0)}.`
-        );
+        setMessage("Unable to fulfill. No matching resource is currently available in inventory.");
+        setMessageTone("warning");
       }
     } catch (fulfillError) {
-      setError(fulfillError instanceof Error ? fulfillError.message : "Unable to fulfill the request.");
+      setError(fulfillError instanceof Error ? fulfillError.message : "Unable to fulfill the request. Insufficient resources");
     } finally {
       setFulfillingId(null);
     }
@@ -207,6 +214,12 @@ export default function NgoRequestsPage() {
 
   return (
     <div className="space-y-6">
+      {message && messageTone === "warning" ? (
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          {message}
+        </div>
+      ) : null}
+
       <Card>
         <CardTitle>Incoming citizen requests</CardTitle>
         <CardDescription className="mt-2">
@@ -222,6 +235,8 @@ export default function NgoRequestsPage() {
             const matchingResource =
               (request.resourceId ? resourceLookup.byId.get(request.resourceId) : undefined) ??
               (request.resourceName ? resourceLookup.byName.get(request.resourceName.trim().toLowerCase()) : undefined);
+            const requestStatus = (request.status ?? "pending").toLowerCase();
+            const statusLabel = requestStatus.replace(/_/g, " ");
 
             return (
               <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4" key={request.id}>
@@ -229,7 +244,10 @@ export default function NgoRequestsPage() {
                   <div>
                     <p className="font-medium text-white">{request.resourceName ?? "Unnamed request"}</p>
                     <p className="mt-1 text-sm text-muted">
-                      Needs {request.quantityNeeded ?? 0} • {(request.urgency ?? "normal").toLowerCase()} priority
+                      Needs {request.quantityNeeded ?? 0}
+                      {requestStatus !== "pending" ? ` • ${statusLabel}` : ""}
+                      {" • "}
+                      {(request.urgency ?? "normal").toLowerCase()} priority
                     </p>
                   </div>
                   <div className="text-right">
@@ -255,7 +273,7 @@ export default function NgoRequestsPage() {
             </div>
           ) : null}
         </div>
-        {message ? <p className="mt-4 text-sm text-success">{message}</p> : null}
+        {message && messageTone === "success" ? <p className="mt-4 text-sm text-success">{message}</p> : null}
       </Card>
     </div>
   );
