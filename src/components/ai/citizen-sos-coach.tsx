@@ -11,10 +11,12 @@ import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 
 export function CitizenSosCoach({
   type,
-  description
+  description,
+  onApplyRefined
 }: {
   type: string;
   description: string;
+  onApplyRefined?: (value: string) => void;
 }) {
   const [result, setResult] = useState<PreparedSosSubmission | null>(null);
   const [loading, setLoading] = useState(false);
@@ -45,7 +47,11 @@ export function CitizenSosCoach({
             AI rewrites your message into a clearer responder-facing summary, but you still review it before anything is sent.
           </CardDescription>
         </div>
-        <Button disabled={loading || !description.trim()} onClick={() => void onPrepare()}>
+        <Button
+          className="rounded-full px-5 py-2.5 whitespace-nowrap"
+          disabled={loading || !description.trim()}
+          onClick={() => void onPrepare()}
+        >
           {loading ? "Preparing..." : "Prepare with AI"}
         </Button>
       </div>
@@ -58,6 +64,13 @@ export function CitizenSosCoach({
           <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
             <p className="text-sm font-medium text-white">Prepared SOS summary</p>
             <p className="mt-2 text-sm text-slate-300">{result.refined}</p>
+            {onApplyRefined ? (
+              <div className="mt-4">
+                <Button className="rounded-full px-5 py-2.5 whitespace-nowrap" onClick={() => onApplyRefined(result.refined)}>
+                  Use AI summary in my SOS
+                </Button>
+              </div>
+            ) : null}
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4">

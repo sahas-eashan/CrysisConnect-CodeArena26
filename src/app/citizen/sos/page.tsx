@@ -116,7 +116,11 @@ export default function CitizenSOSPage() {
   return (
     <div className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
       <div className="space-y-6">
-        <CitizenSosCoach description={description} type={sosType} />
+        <CitizenSosCoach
+          description={description}
+          onApplyRefined={(value) => setDescription(value)}
+          type={sosType}
+        />
 
         <Card className="border-danger/30">
         <CardTitle>Emergency SOS</CardTitle>
@@ -124,7 +128,7 @@ export default function CitizenSOSPage() {
           One tap to alert nearby responders. Your live coordinates are used for triage and safe-zone routing.
         </CardDescription>
         <div className="mt-6 flex flex-wrap gap-3">
-          <Button onClick={requestLocation} variant="danger">
+          <Button className="rounded-full px-5 py-2.5 whitespace-nowrap" onClick={requestLocation} variant="danger">
             {loading ? "Capturing location..." : "Capture my location"}
           </Button>
           {coordinates ? (
@@ -152,7 +156,7 @@ export default function CitizenSOSPage() {
             placeholder="Describe the situation"
             value={description}
           />
-          <Button className="w-full" disabled={saving} type="submit" variant="danger">
+          <Button className="w-full rounded-full" disabled={saving} type="submit" variant="danger">
             {saving ? "Sending..." : "Send SOS"}
           </Button>
         </form>
