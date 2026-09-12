@@ -422,6 +422,24 @@ abstract class AppLocalizations {
   /// **'Get Me To Safety'**
   String get getMeToSafety;
 
+  /// No description provided for @inAppDirections.
+  ///
+  /// In en, this message translates to:
+  /// **'In-app directions'**
+  String get inAppDirections;
+
+  /// No description provided for @directionsButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Directions'**
+  String get directionsButton;
+
+  /// No description provided for @openInGoogleMaps.
+  ///
+  /// In en, this message translates to:
+  /// **'Open in Google Maps'**
+  String get openInGoogleMaps;
+
   /// No description provided for @nearestSafeZone.
   ///
   /// In en, this message translates to:
@@ -578,11 +596,35 @@ abstract class AppLocalizations {
   /// **'Request'**
   String get requestButton;
 
+  /// No description provided for @requestUnlistedItem.
+  ///
+  /// In en, this message translates to:
+  /// **'Request unlisted item'**
+  String get requestUnlistedItem;
+
+  /// No description provided for @requestUnlistedDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Need something not in the catalog? Send a custom request for it.'**
+  String get requestUnlistedDescription;
+
   /// No description provided for @requestDialogTitle.
   ///
   /// In en, this message translates to:
   /// **'Request {name}'**
   String requestDialogTitle(String name);
+
+  /// No description provided for @itemName.
+  ///
+  /// In en, this message translates to:
+  /// **'Item name'**
+  String get itemName;
+
+  /// No description provided for @itemNameRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter the item you need.'**
+  String get itemNameRequired;
 
   /// No description provided for @quantityNeeded.
   ///
@@ -731,7 +773,7 @@ abstract class AppLocalizations {
   /// No description provided for @routeNotFound.
   ///
   /// In en, this message translates to:
-  /// **'Could not find a route to the safe zone.'**
+  /// **'Could not find a route to this location.'**
   String get routeNotFound;
 
   /// No description provided for @locationNeeded.
@@ -739,6 +781,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Current location is needed for routing.'**
   String get locationNeeded;
+
+  /// No description provided for @googleMapsOpenFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open Google Maps directions.'**
+  String get googleMapsOpenFailed;
 }
 
 class _AppLocalizationsDelegate

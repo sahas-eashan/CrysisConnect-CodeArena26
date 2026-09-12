@@ -180,6 +180,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get getMeToSafety => 'Get Me To Safety';
 
   @override
+  String get inAppDirections => 'In-app directions';
+
+  @override
+  String get directionsButton => 'Directions';
+
+  @override
+  String get openInGoogleMaps => 'Open in Google Maps';
+
+  @override
   String get nearestSafeZone => 'Nearest Safe Zone';
 
   @override
@@ -265,9 +274,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get requestButton => 'Request';
 
   @override
+  String get requestUnlistedItem => 'Request unlisted item';
+
+  @override
+  String get requestUnlistedDescription =>
+      'Need something not in the catalog? Send a custom request for it.';
+
+  @override
   String requestDialogTitle(String name) {
     return 'Request $name';
   }
+
+  @override
+  String get itemName => 'Item name';
+
+  @override
+  String get itemNameRequired => 'Enter the item you need.';
 
   @override
   String get quantityNeeded => 'Quantity needed';
@@ -350,8 +372,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cancelNavigation => 'Cancel';
 
   @override
-  String get routeNotFound => 'Could not find a route to the safe zone.';
+  String get routeNotFound => 'Could not find a route to this location.';
 
   @override
   String get locationNeeded => 'Current location is needed for routing.';
+
+  @override
+  String get googleMapsOpenFailed => 'Could not open Google Maps directions.';
 }

@@ -180,6 +180,15 @@ class AppLocalizationsSi extends AppLocalizations {
   String get getMeToSafety => 'මාව ආරක්‍ෂිත ස්ථානයට ගෙන යන්න';
 
   @override
+  String get inAppDirections => 'යෙදුම තුළ මාර්ගය';
+
+  @override
+  String get directionsButton => 'මාර්ගය';
+
+  @override
+  String get openInGoogleMaps => 'Google Maps තුළ විවෘත කරන්න';
+
+  @override
   String get nearestSafeZone => 'ළඟම ආරක්‍ෂිත ස්ථානය';
 
   @override
@@ -264,9 +273,22 @@ class AppLocalizationsSi extends AppLocalizations {
   String get requestButton => 'ඉල්ලන්න';
 
   @override
+  String get requestUnlistedItem => 'ලැයිස්තුවේ නැති අයිතමයක් ඉල්ලන්න';
+
+  @override
+  String get requestUnlistedDescription =>
+      'නාමාවලියේ නැති දෙයක් අවශ්‍යද? ඒ සඳහා අභිරුචි ඉල්ලීමක් යවන්න.';
+
+  @override
   String requestDialogTitle(String name) {
     return '$name ඉල්ලන්න';
   }
+
+  @override
+  String get itemName => 'අයිතමයේ නම';
+
+  @override
+  String get itemNameRequired => 'ඔබට අවශ්‍ය අයිතමය ඇතුළත් කරන්න.';
 
   @override
   String get quantityNeeded => 'අවශ්‍ය ප්‍රමාණය';
@@ -349,8 +371,11 @@ class AppLocalizationsSi extends AppLocalizations {
   String get cancelNavigation => 'අවලංගු කරන්න';
 
   @override
-  String get routeNotFound => 'ආරක්‍ෂිත ස්ථානයට මාර්ගයක් සොයා ගත නොහැක.';
+  String get routeNotFound => 'මෙම ස්ථානයට මාර්ගයක් සොයා ගත නොහැක.';
 
   @override
   String get locationNeeded => 'මාර්ගය සඳහා වත්මන් ස්ථානය අවශ්‍යයි.';
+
+  @override
+  String get googleMapsOpenFailed => 'Google Maps මාර්ගය විවෘත කළ නොහැක.';
 }

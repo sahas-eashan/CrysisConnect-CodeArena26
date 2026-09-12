@@ -56,6 +56,9 @@
   "filterResources": "Resources",
   "liveMapBanner": "Live citizen safety map from AppSync + PostGIS",
   "getMeToSafety": "Get Me To Safety",
+  "inAppDirections": "In-app directions",
+  "directionsButton": "Directions",
+  "openInGoogleMaps": "Open in Google Maps",
   "nearestSafeZone": "Nearest Safe Zone",
   "holdToSendSos": "HOLD TO\nSEND SOS",
   "sosInstruction": "Press and hold for 3 seconds to send your location to the live CrisisConnect responder network.",
@@ -83,8 +86,12 @@
   "myActiveRequests": "My Active Requests",
   "requestHistoryEmpty": "Your request history will appear here once you submit a resource request.",
   "requestButton": "Request",
+  "requestUnlistedItem": "Request unlisted item",
+  "requestUnlistedDescription": "Need something not in the catalog? Send a custom request for it.",
   "requestDialogTitle": "Request {name}",
   "@requestDialogTitle": { "placeholders": { "name": { "type": "String" } } },
+  "itemName": "Item name",
+  "itemNameRequired": "Enter the item you need.",
   "quantityNeeded": "Quantity needed",
   "urgency": "Urgency",
   "urgencyNormal": "Normal",
@@ -112,6 +119,7 @@
   "routeDuration": "{minutes} min",
   "@routeDuration": { "placeholders": { "minutes": { "type": "String" } } },
   "cancelNavigation": "Cancel",
-  "routeNotFound": "Could not find a route to the safe zone.",
-  "locationNeeded": "Current location is needed for routing."
+  "routeNotFound": "Could not find a route to this location.",
+  "locationNeeded": "Current location is needed for routing.",
+  "googleMapsOpenFailed": "Could not open Google Maps directions."
 }

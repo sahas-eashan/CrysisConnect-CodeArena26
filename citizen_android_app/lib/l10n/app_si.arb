@@ -53,6 +53,9 @@
   "filterResources": "සම්පත්",
   "liveMapBanner": "AppSync + PostGIS සිට සජීවී පුරවැසි ආරක්‍ෂිත සිතියම",
   "getMeToSafety": "මාව ආරක්‍ෂිත ස්ථානයට ගෙන යන්න",
+  "inAppDirections": "යෙදුම තුළ මාර්ගය",
+  "directionsButton": "මාර්ගය",
+  "openInGoogleMaps": "Google Maps තුළ විවෘත කරන්න",
   "nearestSafeZone": "ළඟම ආරක්‍ෂිත ස්ථානය",
   "holdToSendSos": "SOS යැවීමට\nඔබාගෙන සිටින්න",
   "sosInstruction": "ඔබගේ ස්ථානය CrisisConnect ප්‍රතිචාරක ජාලයට යැවීමට තත්පර 3ක් ඔබාගෙන සිටින්න.",
@@ -79,7 +82,11 @@
   "myActiveRequests": "මගේ සක්‍රිය ඉල්ලීම්",
   "requestHistoryEmpty": "සම්පත් ඉල්ලීමක් ඉදිරිපත් කළ පසු ඔබගේ ඉල්ලීම් ඉතිහාසය මෙහි දිස් වනු ඇත.",
   "requestButton": "ඉල්ලන්න",
+  "requestUnlistedItem": "ලැයිස්තුවේ නැති අයිතමයක් ඉල්ලන්න",
+  "requestUnlistedDescription": "නාමාවලියේ නැති දෙයක් අවශ්‍යද? ඒ සඳහා අභිරුචි ඉල්ලීමක් යවන්න.",
   "requestDialogTitle": "{name} ඉල්ලන්න",
+  "itemName": "අයිතමයේ නම",
+  "itemNameRequired": "ඔබට අවශ්‍ය අයිතමය ඇතුළත් කරන්න.",
   "quantityNeeded": "අවශ්‍ය ප්‍රමාණය",
   "urgency": "හදිසි බව",
   "urgencyNormal": "සාමාන්‍ය",
@@ -104,6 +111,7 @@
   "routeDistance": "කි.මී. {distance}",
   "routeDuration": "මිනි. {minutes}",
   "cancelNavigation": "අවලංගු කරන්න",
-  "routeNotFound": "ආරක්‍ෂිත ස්ථානයට මාර්ගයක් සොයා ගත නොහැක.",
-  "locationNeeded": "මාර්ගය සඳහා වත්මන් ස්ථානය අවශ්‍යයි."
+  "routeNotFound": "මෙම ස්ථානයට මාර්ගයක් සොයා ගත නොහැක.",
+  "locationNeeded": "මාර්ගය සඳහා වත්මන් ස්ථානය අවශ්‍යයි.",
+  "googleMapsOpenFailed": "Google Maps මාර්ගය විවෘත කළ නොහැක."
 }

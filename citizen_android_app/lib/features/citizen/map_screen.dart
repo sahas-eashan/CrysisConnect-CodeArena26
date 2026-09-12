@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key, required this.repository});
@@ -14,6 +15,28 @@ class MapScreen extends StatefulWidget {
 
   @override
   State<MapScreen> createState() => _MapScreenState();
+}
+
+class _MapDestination {
+  const _MapDestination({
+    required this.title,
+    required this.kindLabel,
+    required this.destination,
+    required this.icon,
+    required this.color,
+    this.subtitle,
+    this.secondaryText,
+    this.chips = const [],
+  });
+
+  final String title;
+  final String kindLabel;
+  final String? subtitle;
+  final String? secondaryText;
+  final List<String> chips;
+  final LatLng destination;
+  final IconData icon;
+  final Color color;
 }
 
 class _RouteInfo {
@@ -27,14 +50,18 @@ class _RouteInfo {
   final List<LatLng> points;
   final double distanceKm;
   final double durationMin;
-  final SafeZone destination;
+  final _MapDestination destination;
 }
 
 class _MapScreenState extends State<MapScreen> {
+  static const double _markerWidth = 104;
+  static const double _markerHeight = 82;
+
   late Future<MapBundle> _future;
   final MapController _mapController = MapController();
   String _filter = 'all';
   _RouteInfo? _activeRoute;
+  _MapDestination? _selectedDestination;
   bool _routeLoading = false;
 
   @override
@@ -47,24 +74,40 @@ class _MapScreenState extends State<MapScreen> {
     setState(() {
       _future = widget.repository.loadMapData();
       _activeRoute = null;
+      _selectedDestination = null;
     });
     await _future;
   }
 
-  Future<void> _startNavigation(LatLng from, SafeZone zone) async {
+  void _setFilter(String value) {
+    setState(() {
+      _filter = value;
+      _selectedDestination = null;
+    });
+  }
+
+  void _selectDestination(_MapDestination destination) {
+    setState(() {
+      _selectedDestination = destination;
+      _activeRoute = null;
+    });
+  }
+
+  Future<void> _startNavigation(
+    LatLng from,
+    _MapDestination destination,
+  ) async {
     final l10n = AppLocalizations.of(context)!;
-    final destination = zone.locationPoint;
-    if (destination == null) return;
 
     setState(() => _routeLoading = true);
 
     try {
-      final route = await _fetchRoute(from, destination.latLng);
+      final route = await _fetchRoute(from, destination.destination);
       if (!mounted) return;
       if (route == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.routeNotFound)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.routeNotFound)));
         setState(() => _routeLoading = false);
         return;
       }
@@ -74,7 +117,7 @@ class _MapScreenState extends State<MapScreen> {
           points: route.points,
           distanceKm: route.distanceKm,
           durationMin: route.durationMin,
-          destination: zone,
+          destination: destination,
         );
         _routeLoading = false;
       });
@@ -90,10 +133,88 @@ class _MapScreenState extends State<MapScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() => _routeLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
     }
+  }
+
+  Future<void> _openGoogleMapsDirections(_MapDestination destination) async {
+    final l10n = AppLocalizations.of(context)!;
+
+    final googleMapsUri = Uri.parse(
+      'google.navigation:q=${destination.destination.latitude},${destination.destination.longitude}&mode=d',
+    );
+    final browserFallbackUri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=${destination.destination.latitude},${destination.destination.longitude}&travelmode=driving',
+    );
+
+    try {
+      final openedInMaps = await launchUrl(
+        googleMapsUri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (openedInMaps || !mounted) return;
+
+      final openedFallback = await launchUrl(
+        browserFallbackUri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (openedFallback || !mounted) return;
+    } catch (_) {
+      if (!mounted) return;
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(l10n.googleMapsOpenFailed)));
+  }
+
+  _MapDestination _buildSafeZoneDestination(
+    SafeZone zone,
+    AppLocalizations l10n,
+  ) {
+    return _MapDestination(
+      title: zone.name,
+      kindLabel: l10n.safeZones,
+      subtitle: l10n.capacity(zone.currentOccupancy, zone.capacity),
+      secondaryText: zone.status?.toUpperCase(),
+      chips: zone.amenities,
+      destination: zone.locationPoint!.latLng,
+      icon: Icons.home_rounded,
+      color: AppColors.tertiary,
+    );
+  }
+
+  _MapDestination _buildResourceDestination(
+    ResourceItem resource,
+    AppLocalizations l10n,
+  ) {
+    final subtitleParts = <String>[
+      if (resource.category != null && resource.category!.trim().isNotEmpty)
+        resource.category!,
+      if (resource.quantity != null)
+        '${resource.quantity} ${resource.unit ?? l10n.units}',
+    ];
+
+    final chips = <String>[
+      if (resource.status != null && resource.status!.trim().isNotEmpty)
+        resource.status!.toUpperCase(),
+    ];
+
+    return _MapDestination(
+      title: resource.name,
+      kindLabel: l10n.resources,
+      subtitle: subtitleParts.isEmpty ? null : subtitleParts.join(' • '),
+      secondaryText: resource.managedBy == null
+          ? null
+          : l10n.managedBy(resource.managedBy!),
+      chips: chips,
+      destination: resource.locationPoint!.latLng,
+      icon: Icons.inventory_2_rounded,
+      color: AppColors.primary,
+    );
   }
 
   Future<_RouteResult?> _fetchRoute(LatLng from, LatLng to) async {
@@ -118,10 +239,12 @@ class _MapScreenState extends State<MapScreen> {
     final durationSeconds = (route['duration'] as num).toDouble();
 
     final points = coordinates
-        .map((coord) => LatLng(
-              (coord[1] as num).toDouble(),
-              (coord[0] as num).toDouble(),
-            ))
+        .map(
+          (coord) => LatLng(
+            (coord[1] as num).toDouble(),
+            (coord[0] as num).toDouble(),
+          ),
+        )
         .toList();
 
     return _RouteResult(
@@ -136,6 +259,7 @@ class _MapScreenState extends State<MapScreen> {
     return FutureBuilder<MapBundle>(
       future: _future,
       builder: (context, snapshot) {
+        final l10n = AppLocalizations.of(context)!;
         if (snapshot.connectionState != ConnectionState.done) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -146,15 +270,19 @@ class _MapScreenState extends State<MapScreen> {
               padding: const EdgeInsets.all(24),
               child: FilledButton(
                 onPressed: _refresh,
-                child: Text(
-                    '${AppLocalizations.of(context)!.retryMapLoad}\n${snapshot.error}'),
+                child: Text('${l10n.retryMapLoad}\n${snapshot.error}'),
               ),
             ),
           );
         }
 
         final bundle = snapshot.data!;
-        final center = bundle.currentLocation ??
+        final nearestDestination = bundle.nearestSafeZone?.locationPoint == null
+            ? null
+            : _buildSafeZoneDestination(bundle.nearestSafeZone!, l10n);
+        final displayedDestination = _selectedDestination ?? nearestDestination;
+        final center =
+            bundle.currentLocation ??
             bundle.nearestSafeZone?.locationPoint?.latLng ??
             bundle.safeZones.firstOrNull?.locationPoint?.latLng ??
             bundle.disasters.firstOrNull?.mapCenter ??
@@ -193,12 +321,15 @@ class _MapScreenState extends State<MapScreen> {
                 .map(
                   (zone) => Marker(
                     point: zone.locationPoint!.latLng,
-                    width: 88,
-                    height: 70,
+                    width: _MapScreenState._markerWidth,
+                    height: _MapScreenState._markerHeight,
                     child: _MapMarker(
                       color: AppColors.tertiary,
                       icon: Icons.home_rounded,
                       label: zone.name,
+                      onTap: () => _selectDestination(
+                        _buildSafeZoneDestination(zone, l10n),
+                      ),
                     ),
                   ),
                 ),
@@ -208,12 +339,15 @@ class _MapScreenState extends State<MapScreen> {
                 .map(
                   (resource) => Marker(
                     point: resource.locationPoint!.latLng,
-                    width: 90,
-                    height: 70,
+                    width: _MapScreenState._markerWidth,
+                    height: _MapScreenState._markerHeight,
                     child: _MapMarker(
                       color: AppColors.primary,
                       icon: Icons.inventory_2_rounded,
                       label: resource.name,
+                      onTap: () => _selectDestination(
+                        _buildResourceDestination(resource, l10n),
+                      ),
                     ),
                   ),
                 ),
@@ -240,14 +374,19 @@ class _MapScreenState extends State<MapScreen> {
                 initialCenter: center,
                 initialZoom: 12,
                 initialRotation: 0,
+                onTap: (_, point) {
+                  if (_selectedDestination == null || _activeRoute != null) {
+                    return;
+                  }
+                  setState(() => _selectedDestination = null);
+                },
                 interactionOptions: const InteractionOptions(
                   flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
                 ),
               ),
               children: [
                 TileLayer(
-                  urlTemplate:
-                      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                   userAgentPackageName: 'com.crisisconnect.citizen',
                 ),
                 if ((_filter == 'all' || _filter == 'disasters') &&
@@ -286,32 +425,24 @@ class _MapScreenState extends State<MapScreen> {
                       child: Row(
                         children: [
                           _FilterChip(
-                            label:
-                                AppLocalizations.of(context)!.filterAll,
+                            label: l10n.filterAll,
                             active: _filter == 'all',
-                            onTap: () =>
-                                setState(() => _filter = 'all'),
+                            onTap: () => _setFilter('all'),
                           ),
                           _FilterChip(
-                            label: AppLocalizations.of(context)!
-                                .filterSafeZones,
+                            label: l10n.filterSafeZones,
                             active: _filter == 'safeZones',
-                            onTap: () =>
-                                setState(() => _filter = 'safeZones'),
+                            onTap: () => _setFilter('safeZones'),
                           ),
                           _FilterChip(
-                            label: AppLocalizations.of(context)!
-                                .filterDisasters,
+                            label: l10n.filterDisasters,
                             active: _filter == 'disasters',
-                            onTap: () =>
-                                setState(() => _filter = 'disasters'),
+                            onTap: () => _setFilter('disasters'),
                           ),
                           _FilterChip(
-                            label: AppLocalizations.of(context)!
-                                .filterResources,
+                            label: l10n.filterResources,
                             active: _filter == 'resources',
-                            onTap: () =>
-                                setState(() => _filter = 'resources'),
+                            onTap: () => _setFilter('resources'),
                           ),
                         ],
                       ),
@@ -331,58 +462,61 @@ class _MapScreenState extends State<MapScreen> {
                   if (_activeRoute != null)
                     _NavigationBar(
                       route: _activeRoute!,
-                      onCancel: () => setState(() => _activeRoute = null),
+                      onCancel: () => setState(() {
+                        _selectedDestination = _activeRoute!.destination;
+                        _activeRoute = null;
+                      }),
+                      onOpenInGoogleMaps: () =>
+                          _openGoogleMapsDirections(_activeRoute!.destination),
                     )
-                  else
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: FilledButton.icon(
-                        onPressed: _routeLoading
-                            ? null
-                            : () {
-                                final l10n =
-                                    AppLocalizations.of(context)!;
-                                if (bundle.currentLocation == null) {
-                                  ScaffoldMessenger.of(context)
-                                      .showSnackBar(
-                                    SnackBar(
-                                        content:
-                                            Text(l10n.locationNeeded)),
-                                  );
-                                  return;
-                                }
-                                if (bundle.nearestSafeZone == null) return;
-                                _startNavigation(
-                                  bundle.currentLocation!,
-                                  bundle.nearestSafeZone!,
-                                );
-                              },
-                        icon: _routeLoading
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Icon(Icons.navigation_rounded),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.secondary,
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 18),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(24),
-                          ),
-                        ),
-                        label: Text(
-                            AppLocalizations.of(context)!.getMeToSafety),
+                  else if (nearestDestination != null &&
+                      _selectedDestination == null)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: _SafetyFab(
+                        loading: _routeLoading,
+                        tooltip: l10n.getMeToSafety,
+                        onPressed: () {
+                          if (bundle.currentLocation == null) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(l10n.locationNeeded)),
+                            );
+                            return;
+                          }
+                          _startNavigation(
+                            bundle.currentLocation!,
+                            nearestDestination,
+                          );
+                        },
                       ),
                     ),
-                  if (bundle.nearestSafeZone != null &&
-                      _activeRoute == null) ...[
-                    const SizedBox(height: 16),
-                    _SafeZoneSheet(zone: bundle.nearestSafeZone!),
+                  if (displayedDestination != null && _activeRoute == null) ...[
+                    const SizedBox(height: 12),
+                    _DestinationSheet(
+                      heading: _selectedDestination == null
+                          ? l10n.nearestSafeZone
+                          : displayedDestination.kindLabel,
+                      destination: displayedDestination,
+                      primaryLabel: l10n.inAppDirections,
+                      secondaryLabel: l10n.openInGoogleMaps,
+                      onClose: _selectedDestination == null
+                          ? null
+                          : () => setState(() => _selectedDestination = null),
+                      onStartNavigation: () {
+                        if (bundle.currentLocation == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(l10n.locationNeeded)),
+                          );
+                          return;
+                        }
+                        _startNavigation(
+                          bundle.currentLocation!,
+                          displayedDestination,
+                        );
+                      },
+                      onOpenInGoogleMaps: () =>
+                          _openGoogleMapsDirections(displayedDestination),
+                    ),
                   ],
                 ],
               ),
@@ -407,10 +541,15 @@ class _RouteResult {
 }
 
 class _NavigationBar extends StatelessWidget {
-  const _NavigationBar({required this.route, required this.onCancel});
+  const _NavigationBar({
+    required this.route,
+    required this.onCancel,
+    required this.onOpenInGoogleMaps,
+  });
 
   final _RouteInfo route;
   final VoidCallback onCancel;
+  final VoidCallback onOpenInGoogleMaps;
 
   @override
   Widget build(BuildContext context) {
@@ -437,22 +576,32 @@ class _NavigationBar extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  route.destination.name,
+                  route.destination.title,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                      ),
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   '${l10n.routeDistance(route.distanceKm.toStringAsFixed(1))}  •  ${l10n.routeDuration(route.durationMin.toStringAsFixed(0))}',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.white.withValues(alpha: 0.82),
-                        fontWeight: FontWeight.w600,
-                      ),
+                    color: Colors.white.withValues(alpha: 0.82),
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            onPressed: onOpenInGoogleMaps,
+            tooltip: l10n.openInGoogleMaps,
+            style: IconButton.styleFrom(
+              backgroundColor: Colors.white.withValues(alpha: 0.18),
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(Icons.map_rounded),
           ),
           const SizedBox(width: 8),
           GestureDetector(
@@ -483,56 +632,117 @@ class _MapMarker extends StatelessWidget {
     required this.color,
     required this.icon,
     required this.label,
+    this.onTap,
   });
 
   final Color color;
   final IconData icon;
   final String label;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 42,
-          height: 42,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: color.withValues(alpha: 0.26),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
-              ),
-            ],
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.26),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Icon(icon, color: Colors.white, size: 22),
           ),
-          child: Icon(icon, color: Colors.white, size: 22),
-        ),
-        const SizedBox(height: 6),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.90),
-            borderRadius: BorderRadius.circular(18),
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.90),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+            ),
           ),
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
 
-class _SafeZoneSheet extends StatelessWidget {
-  const _SafeZoneSheet({required this.zone});
+class _SafetyFab extends StatelessWidget {
+  const _SafetyFab({
+    required this.loading,
+    required this.onPressed,
+    required this.tooltip,
+  });
 
-  final SafeZone zone;
+  final bool loading;
+  final VoidCallback onPressed;
+  final String tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: Tooltip(
+        message: tooltip,
+        child: FilledButton(
+          onPressed: loading ? null : onPressed,
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.secondary,
+            shape: const CircleBorder(),
+            padding: const EdgeInsets.all(18),
+            minimumSize: const Size(64, 64),
+          ),
+          child: loading
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.4,
+                    color: Colors.white,
+                  ),
+                )
+              : const Icon(Icons.navigation_rounded, size: 28),
+        ),
+      ),
+    );
+  }
+}
+
+class _DestinationSheet extends StatelessWidget {
+  const _DestinationSheet({
+    required this.heading,
+    required this.destination,
+    required this.primaryLabel,
+    required this.secondaryLabel,
+    required this.onStartNavigation,
+    required this.onOpenInGoogleMaps,
+    this.onClose,
+  });
+
+  final String heading;
+  final _MapDestination destination;
+  final String primaryLabel;
+  final String secondaryLabel;
+  final VoidCallback onStartNavigation;
+  final VoidCallback onOpenInGoogleMaps;
+  final VoidCallback? onClose;
 
   @override
   Widget build(BuildContext context) {
@@ -546,35 +756,78 @@ class _SafeZoneSheet extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            AppLocalizations.of(context)!.nearestSafeZone,
-            style: const TextStyle(
-              color: AppColors.primary,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.2,
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: destination.color.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(destination.icon, color: destination.color),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      heading,
+                      style: const TextStyle(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      destination.title,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (onClose != null) ...[
+                const SizedBox(width: 12),
+                IconButton(
+                  onPressed: onClose,
+                  style: IconButton.styleFrom(
+                    backgroundColor: AppColors.surfaceLow,
+                    foregroundColor: AppColors.primary,
+                  ),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ],
+            ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            zone.name,
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            AppLocalizations.of(context)!
-                .capacity(zone.currentOccupancy, zone.capacity),
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: AppColors.outline),
-          ),
-          if (zone.amenities.isNotEmpty) ...[
+          if (destination.subtitle != null) ...[
             const SizedBox(height: 10),
+            Text(
+              destination.subtitle!,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: AppColors.outline),
+            ),
+          ],
+          if (destination.secondaryText != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              destination.secondaryText!,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AppColors.surfaceVariantText,
+              ),
+            ),
+          ],
+          if (destination.chips.isNotEmpty) ...[
+            const SizedBox(height: 12),
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: zone.amenities
+              children: destination.chips
                   .map(
                     (item) => Container(
                       padding: const EdgeInsets.symmetric(
@@ -594,6 +847,27 @@ class _SafeZoneSheet extends StatelessWidget {
                   .toList(),
             ),
           ],
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: onStartNavigation,
+            icon: const Icon(Icons.navigation_rounded),
+            style: FilledButton.styleFrom(
+              backgroundColor: destination.color,
+              minimumSize: const Size.fromHeight(48),
+            ),
+            label: Text(primaryLabel),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: onOpenInGoogleMaps,
+            icon: const Icon(Icons.map_outlined),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              side: const BorderSide(color: AppColors.primary),
+              minimumSize: const Size.fromHeight(48),
+            ),
+            label: Text(secondaryLabel),
+          ),
         ],
       ),
     );
