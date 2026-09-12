@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:crisisconnect_citizen/core/backend.dart';
+import 'package:crisisconnect_citizen/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -50,6 +51,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
     return RefreshIndicator(
       onRefresh: _refresh,
       child: FutureBuilder<DashboardBundle>(
@@ -82,31 +85,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
               if (primaryDisaster != null)
                 _EmergencyBanner(disaster: primaryDisaster)
               else
-                const _EmptyBanner(
-                  title: 'No active disaster alerts',
-                  message:
-                      'This citizen app is now connected to the live backend. Pull to refresh for new incidents.',
+                _EmptyBanner(
+                  title: l10n.noActiveAlerts,
+                  message: l10n.noActiveAlertsMsg,
                 ),
               const SizedBox(height: 16),
               Row(
                 children: [
                   Expanded(
                     child: _StatCard(
-                      label: 'Active disasters',
+                      label: l10n.activeDisasters,
                       value: bundle.stats.activeDisasters.toString(),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: _StatCard(
-                      label: 'Safe zones',
+                      label: l10n.safeZones,
                       value: bundle.stats.totalSafeZones.toString(),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: _StatCard(
-                      label: 'Resources',
+                      label: l10n.resources,
                       value: bundle.stats.totalResources.toString(),
                     ),
                   ),
@@ -116,14 +118,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               if (safeZone != null) _SafeZoneCard(zone: safeZone),
               const SizedBox(height: 22),
               _SectionHeader(
-                title: 'Active Disasters',
-                subtitle: 'Fetched from AppSync / PostGIS',
+                title: l10n.activeSectionTitle,
+                subtitle: l10n.activeSectionSubtitle,
               ),
               const SizedBox(height: 12),
               if (bundle.disasters.isEmpty)
-                const _EmptyTile(
-                  message: 'No active disaster records were returned.',
-                )
+                _EmptyTile(message: l10n.noDisasterRecords)
               else
                 ...bundle.disasters.map(
                   (disaster) => Padding(
@@ -133,14 +133,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               const SizedBox(height: 18),
               _SectionHeader(
-                title: 'Live Crisis Updates',
-                subtitle: 'Realtime news stream',
+                title: l10n.liveCrisisUpdates,
+                subtitle: l10n.realtimeNewsSubtitle,
               ),
               const SizedBox(height: 12),
               if (news.isEmpty)
-                const _EmptyTile(
-                  message: 'No published updates are available yet.',
-                )
+                _EmptyTile(message: l10n.noPublishedUpdates)
               else
                 ...news
                     .take(4)
@@ -237,6 +235,7 @@ class _SafeZoneCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final percent = (zone.occupancyRate * 100).clamp(0, 100).toDouble();
     return Container(
       padding: const EdgeInsets.all(20),
@@ -247,8 +246,8 @@ class _SafeZoneCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _Pill(
-            label: 'Recommended route',
+          _Pill(
+            label: l10n.recommendedRoute,
             color: AppColors.tertiaryContainer,
             textColor: AppColors.onTertiaryContainer,
           ),
@@ -262,7 +261,7 @@ class _SafeZoneCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Capacity ${zone.currentOccupancy}/${zone.capacity}',
+            l10n.capacity(zone.currentOccupancy, zone.capacity),
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: AppColors.surfaceVariantText,
             ),
@@ -281,7 +280,7 @@ class _SafeZoneCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            '${percent.toStringAsFixed(0)}% occupied',
+            l10n.occupied(percent.toStringAsFixed(0)),
             style: Theme.of(
               context,
             ).textTheme.labelLarge?.copyWith(color: AppColors.outline),
@@ -578,6 +577,7 @@ class _ErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
@@ -586,7 +586,7 @@ class _ErrorView extends StatelessWidget {
         const SizedBox(height: 12),
         Text(message, textAlign: TextAlign.center),
         const SizedBox(height: 16),
-        FilledButton(onPressed: onRetry, child: const Text('Retry')),
+        FilledButton(onPressed: onRetry, child: Text(l10n.retry)),
       ],
     );
   }
