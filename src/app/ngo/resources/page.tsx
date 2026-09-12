@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { generateClient } from "aws-amplify/api";
 
 import { Button } from "@/components/ui/button";
@@ -9,8 +9,8 @@ import { Input } from "@/components/ui/input";
 import { useGeolocation } from "@/hooks/use-geolocation";
 import { configureAmplify } from "@/lib/aws/amplify";
 import { mutations, queries, subscriptions } from "@/lib/aws/graphql/operations";
-import { mockResourceRequests, mockResources } from "@/lib/mock-data";
-import type { Resource, ResourceRequest } from "@/lib/types";
+import { mockResources } from "@/lib/mock-data";
+import type { Resource } from "@/lib/types";
 import { cn, toTitleCase } from "@/lib/utils";
 
 type ResourceFormState = {
@@ -61,34 +61,22 @@ function normalizeLocationInput(value: string) {
   throw new Error("Location must be GeoJSON Point JSON or WKT like POINT (77.8685 6.924).");
 }
 
-function sortRequests(requests: ResourceRequest[]) {
-  const priorityWeight: Record<string, number> = {
-    high: 0,
-    urgent: 0,
-    medium: 1,
-    normal: 2,
-    low: 3
-  };
-
-  return [...requests].sort((left, right) => {
-    const leftPriority = priorityWeight[left.urgency?.toLowerCase() ?? "normal"] ?? 4;
-    const rightPriority = priorityWeight[right.urgency?.toLowerCase() ?? "normal"] ?? 4;
-    if (leftPriority !== rightPriority) return leftPriority - rightPriority;
-    return (right.createdAt ?? "").localeCompare(left.createdAt ?? "");
-  });
-}
-
 export default function NgoResourcesPage() {
   const hasAwsConfig = Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL);
   const [resources, setResources] = useState<Resource[]>(() => (hasAwsConfig ? [] : mockResources));
-  const [requests, setRequests] = useState<ResourceRequest[]>(() => (hasAwsConfig ? [] : mockResourceRequests));
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL));
-  const [fulfillingId, setFulfillingId] = useState<string | null>(null);
   const [savingResource, setSavingResource] = useState(false);
   const [form, setForm] = useState<ResourceFormState>(defaultForm);
   const { coordinates, error: locationError, loading: locationLoading, requestLocation } = useGeolocation();
+  const pendingRequests: Array<{
+    id: string;
+    quantityNeeded?: number | null;
+    resourceName?: string | null;
+    urgency?: string | null;
+  }> = [];
+  const fulfillingId: string | null = null;
 
   useEffect(() => {
     if (!hasAwsConfig) return;
@@ -102,37 +90,15 @@ export default function NgoResourcesPage() {
       setError(null);
 
       try {
-        const [resourceResult, requestResult] = await Promise.allSettled([
-          client.graphql({ query: queries.getResources }),
-          client.graphql({ query: queries.getResourceRequests, variables: { status: "pending" } })
-        ]);
+        const resourceResult = await client.graphql({ query: queries.getResources });
 
         if (!active) return;
 
-        if (resourceResult.status === "fulfilled") {
-          const nextResources = ((resourceResult.value as any).data?.getResources ?? []) as Resource[];
-          setResources(nextResources);
-        } else {
-          setResources([]);
-        }
-
-        if (requestResult.status === "fulfilled") {
-          const nextRequests = ((requestResult.value as any).data?.getResourceRequests ?? []) as ResourceRequest[];
-          setRequests(sortRequests(nextRequests));
-        } else {
-          setRequests([]);
-          const message =
-            requestResult.reason instanceof Error ? requestResult.reason.message : "Unable to load NGO resource data.";
-          setError(
-            message.includes("Unauthorized")
-              ? "This Cognito account is not in the NGO or government group, so live citizen requests cannot be loaded here."
-              : message
-          );
-        }
+        const nextResources = ((resourceResult as any).data?.getResources ?? []) as Resource[];
+        setResources(nextResources);
       } catch (loadError) {
         if (!active) return;
         setResources([]);
-        setRequests([]);
         setError(loadError instanceof Error ? loadError.message : "Unable to load NGO resource data.");
       } finally {
         if (active) {
@@ -152,19 +118,9 @@ export default function NgoResourcesPage() {
       error: (subscriptionError: unknown) => console.error("Resource subscription error", subscriptionError)
     });
 
-    const unsubscribeRequestUpdates = (client.graphql({
-      query: subscriptions.onNewResourceRequest
-    }) as any).subscribe({
-      next: () => {
-        void load();
-      },
-      error: (subscriptionError: unknown) => console.error("Request subscription error", subscriptionError)
-    });
-
     return () => {
       active = false;
       unsubscribeResourceUpdates.unsubscribe();
-      unsubscribeRequestUpdates.unsubscribe();
     };
   }, [hasAwsConfig]);
 
@@ -179,44 +135,6 @@ export default function NgoResourcesPage() {
       })
     }));
   }, [coordinates]);
-
-  const pendingRequests = useMemo(
-    () => requests.filter((request) => (request.status ?? "pending").toLowerCase() !== "fulfilled"),
-    [requests]
-  );
-
-  async function onFulfill(id: string) {
-    if (!hasAwsConfig) {
-      setRequests((current) =>
-        current.map((request) => (request.id === id ? { ...request, status: "fulfilled" } : request))
-      );
-      setMessage("Demo mode: request marked as fulfilled.");
-      setError(null);
-      return;
-    }
-
-    configureAmplify();
-    const client = generateClient();
-
-    try {
-      setFulfillingId(id);
-      setError(null);
-      const result = await client.graphql({
-        query: mutations.fulfillResourceRequest,
-        variables: { id }
-      });
-
-      const updatedRequest = (result as any).data?.fulfillResourceRequest as ResourceRequest | undefined;
-      if (updatedRequest) {
-        setRequests((current) => sortRequests(current.map((request) => (request.id === id ? updatedRequest : request))));
-      }
-      setMessage("Request marked as fulfilled.");
-    } catch (fulfillError) {
-      setError(fulfillError instanceof Error ? fulfillError.message : "Unable to fulfill the request.");
-    } finally {
-      setFulfillingId(null);
-    }
-  }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -256,6 +174,8 @@ export default function NgoResourcesPage() {
       setSavingResource(false);
     }
   }
+
+  async function onFulfill(_id: string) {}
 
   return (
     <div className="grid gap-6 xl:grid-cols-[1fr_0.95fr]">
@@ -302,7 +222,7 @@ export default function NgoResourcesPage() {
           ) : null}
         </div>
 
-        <div className="mt-8">
+        <div className="hidden">
           <p className="text-sm font-medium text-white">Incoming citizen requests</p>
           <div className="mt-3 space-y-3">
             {pendingRequests.map((request) => (

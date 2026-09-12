@@ -153,7 +153,7 @@ export default function NgoDashboardPage() {
             value={state.resources.length}
           />
         </Link>
-        <Link href="/ngo/resources">
+        <Link href="/ngo/requests">
           <StatCard
             helper="Requests from citizens"
             label="Pending resource requests"
