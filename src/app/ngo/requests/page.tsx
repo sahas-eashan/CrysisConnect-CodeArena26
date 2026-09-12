@@ -148,6 +148,13 @@ export default function NgoRequestsPage() {
   }, [resources]);
 
   async function onFulfill(id: string) {
+    const request = requests.find((item) => item.id === id);
+    const matchingResource =
+      (request?.resourceId ? resourceLookup.byId.get(request.resourceId) : undefined) ??
+      (request?.resourceName ? resourceLookup.byName.get(request.resourceName.trim().toLowerCase()) : undefined);
+    const availableAmount = Math.max(0, Number(matchingResource?.quantity ?? 0));
+    const requestedAmount = Math.max(0, Number(request?.quantityNeeded ?? 0));
+
     if (!hasAwsConfig) {
       setRequests((current) =>
         current.map((request) => (request.id === id ? { ...request, status: "fulfilled" } : request))
@@ -175,7 +182,22 @@ export default function NgoRequestsPage() {
       if (updatedRequest) {
         setRequests((current) => sortRequests(current.map((request) => (request.id === id ? updatedRequest : request))));
       }
-      setMessage("Request marked as fulfilled.");
+
+      const refreshedResources = await client.graphql({
+        query: queries.getResources,
+        authMode: "userPool"
+      });
+      setResources((((refreshedResources as any).data?.getResources ?? []) as Resource[]));
+
+      if (!matchingResource) {
+        setMessage("Warning: no resources available in inventory. Request marked as fulfilled.");
+      } else if (availableAmount >= requestedAmount) {
+        setMessage("Request marked as fulfilled and inventory updated.");
+      } else {
+        setMessage(
+          `Inventory exhausted. Remaining request amount: ${updatedRequest?.quantityNeeded ?? Math.max(requestedAmount - availableAmount, 0)}.`
+        );
+      }
     } catch (fulfillError) {
       setError(fulfillError instanceof Error ? fulfillError.message : "Unable to fulfill the request.");
     } finally {

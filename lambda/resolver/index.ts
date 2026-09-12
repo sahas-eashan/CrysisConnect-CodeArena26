@@ -551,14 +551,122 @@ export async function handler(event: AppSyncEvent) {
     case "fulfillResourceRequest": {
       requireGroup(event, ["ngo", "government"]);
       await ensureProfile(pool, event, userId);
-      const { rows } = await pool.query(
-        `UPDATE resource_requests
-         SET status = 'fulfilled', fulfilled_by = $2
-         WHERE id = $1
-         RETURNING *, ST_AsGeoJSON(location) AS location`,
-        [args.id, userId]
-      );
-      return mapRequest(rows[0]);
+      const client = await pool.connect();
+
+      try {
+        await client.query("BEGIN");
+
+        const requestResult = await client.query(
+          `SELECT *
+           FROM resource_requests
+           WHERE id = $1
+           FOR UPDATE`,
+          [args.id]
+        );
+
+        const requestRow = requestResult.rows[0];
+        if (!requestRow) {
+          throw new Error("Resource request not found.");
+        }
+
+        const requestedAmount = Math.max(0, Number(requestRow.quantity_needed ?? 0));
+        let resourceRow: Record<string, any> | undefined;
+
+        if (requestRow.resource_id) {
+          const resourceResult = await client.query(
+            `SELECT *
+             FROM resources
+             WHERE id = $1
+             FOR UPDATE`,
+            [requestRow.resource_id]
+          );
+          resourceRow = resourceResult.rows[0];
+        } else if (requestRow.resource_name) {
+          const resourceResult = await client.query(
+            `SELECT *
+             FROM resources
+             WHERE lower(trim(name)) = lower(trim($1))
+             ORDER BY COALESCE(quantity, 0) DESC, created_at DESC
+             LIMIT 1
+             FOR UPDATE`,
+            [requestRow.resource_name]
+          );
+          resourceRow = resourceResult.rows[0];
+        }
+
+        let updatedRequest;
+
+        if (!resourceRow) {
+          const fulfilledResult = await client.query(
+            `UPDATE resource_requests
+             SET status = 'fulfilled',
+                 fulfilled_by = $2
+             WHERE id = $1
+             RETURNING *, ST_AsGeoJSON(location) AS location`,
+            [args.id, userId]
+          );
+          updatedRequest = fulfilledResult.rows[0];
+        } else {
+          const availableAmount = Math.max(0, Number(resourceRow.quantity ?? 0));
+
+          if (availableAmount >= requestedAmount) {
+            const remainingResourceAmount = Math.max(0, availableAmount - requestedAmount);
+
+            await client.query(
+              `UPDATE resources
+               SET quantity = $2,
+                   status = CASE
+                     WHEN $2 <= 0 THEN 'depleted'
+                     WHEN $2 < 10 THEN 'low'
+                     ELSE 'available'
+                   END
+               WHERE id = $1`,
+              [resourceRow.id, remainingResourceAmount]
+            );
+
+            const fulfilledResult = await client.query(
+              `UPDATE resource_requests
+               SET status = 'fulfilled',
+                   fulfilled_by = $2,
+                   resource_id = COALESCE(resource_id, $3)
+               WHERE id = $1
+               RETURNING *, ST_AsGeoJSON(location) AS location`,
+              [args.id, userId, resourceRow.id]
+            );
+            updatedRequest = fulfilledResult.rows[0];
+          } else {
+            const remainingRequestAmount = Math.max(0, requestedAmount - availableAmount);
+
+            await client.query(
+              `UPDATE resources
+               SET quantity = 0,
+                   status = 'depleted'
+               WHERE id = $1`,
+              [resourceRow.id]
+            );
+
+            const pendingResult = await client.query(
+              `UPDATE resource_requests
+               SET quantity_needed = $2,
+                   status = CASE WHEN $2 <= 0 THEN 'fulfilled' ELSE 'pending' END,
+                   fulfilled_by = CASE WHEN $2 <= 0 THEN $3 ELSE NULL END,
+                   resource_id = COALESCE(resource_id, $4)
+               WHERE id = $1
+               RETURNING *, ST_AsGeoJSON(location) AS location`,
+              [args.id, remainingRequestAmount, userId, resourceRow.id]
+            );
+            updatedRequest = pendingResult.rows[0];
+          }
+        }
+
+        await client.query("COMMIT");
+        return mapRequest(updatedRequest);
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
     }
     case "createSOS": {
       const input = args.input;
