@@ -1,9 +1,10 @@
+import Link from "next/link";
 import { Bell } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 
-export function NotificationBell({ count = 0 }: { count?: number }) {
-  return (
+export function NotificationBell({ count = 0, href }: { count?: number; href?: string }) {
+  const content = (
     <div className="relative rounded-2xl border border-white/10 bg-white/5 p-2.5 shadow-[0_10px_30px_rgba(15,23,42,0.25)]">
       <Bell className="h-5 w-5 text-slate-200" />
       {count > 0 ? (
@@ -12,5 +13,15 @@ export function NotificationBell({ count = 0 }: { count?: number }) {
         </Badge>
       ) : null}
     </div>
+  );
+
+  if (!href) {
+    return content;
+  }
+
+  return (
+    <Link aria-label={`Open notifications${count > 0 ? ` (${count})` : ""}`} href={href}>
+      {content}
+    </Link>
   );
 }

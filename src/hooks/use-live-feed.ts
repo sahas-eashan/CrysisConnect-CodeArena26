@@ -29,7 +29,7 @@ const defaultState: LiveFeedState = {
     : "Live backend is not configured."
 };
 
-export function useLiveFeed() {
+export function useLiveFeed(enabled = true) {
   const hasAwsConfig = Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL);
   const [state, setState] = useState<LiveFeedState>(defaultState);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -47,6 +47,8 @@ export function useLiveFeed() {
     useCallback(() => {
       requestRefresh("Live news update received. Refreshing feed...");
     }, [requestRefresh])
+    ,
+    enabled
   );
 
   useSubscription(
@@ -54,9 +56,23 @@ export function useLiveFeed() {
     useCallback(() => {
       requestRefresh("New emergency alert received. Refreshing feed...");
     }, [requestRefresh])
+    ,
+    enabled
   );
 
   useEffect(() => {
+    if (!enabled) {
+      setState({
+        alerts: [],
+        alertsError: null,
+        loading: false,
+        news: [],
+        newsError: null,
+        status: "Live feed is not active for this view."
+      });
+      return;
+    }
+
     if (!hasAwsConfig) {
       setState(defaultState);
       return;
@@ -134,7 +150,7 @@ export function useLiveFeed() {
     return () => {
       active = false;
     };
-  }, [hasAwsConfig, refreshKey]);
+  }, [enabled, hasAwsConfig, refreshKey]);
 
   return {
     ...state,

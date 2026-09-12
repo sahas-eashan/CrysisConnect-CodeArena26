@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { LogOut } from "lucide-react";
 
+import { useLiveFeed } from "@/hooks/use-live-feed";
 import { NotificationBell } from "@/components/shared/notification-bell";
 export function Navbar({
   title,
@@ -11,6 +13,10 @@ export function Navbar({
   title: string;
   subtitle: string;
 }) {
+  const pathname = usePathname();
+  const isCitizenPortal = pathname.startsWith("/citizen");
+  const { news } = useLiveFeed(isCitizenPortal);
+
   return (
     <header className="sticky top-0 z-20 flex items-center justify-between gap-4 border-b border-white/10 bg-[linear-gradient(180deg,rgba(8,14,25,0.94),rgba(8,14,25,0.82))] px-6 py-4 backdrop-blur-xl">
       <div>
@@ -21,7 +27,7 @@ export function Navbar({
         <p className="text-sm text-muted">{subtitle}</p>
       </div>
       <div className="flex items-center gap-3">
-        <NotificationBell count={3} />
+        <NotificationBell count={isCitizenPortal ? news.length : 0} href={isCitizenPortal ? "/citizen/news" : undefined} />
         <Link
           className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-foreground transition hover:border-danger/30 hover:bg-danger/10"
           href="/api/auth/logout"
