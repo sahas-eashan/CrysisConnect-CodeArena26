@@ -7,9 +7,11 @@ import { configureAmplify } from "@/lib/aws/amplify";
 
 export function useSubscription<TData = unknown>(
   query: string,
-  onMessage: (payload: TData) => void
+  onMessage: (payload: TData) => void,
+  enabled = true
 ) {
   useEffect(() => {
+    if (!enabled) return;
     configureAmplify();
     const hasConfig = Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL);
     if (!hasConfig) return;
@@ -21,5 +23,5 @@ export function useSubscription<TData = unknown>(
     });
 
     return () => subscription.unsubscribe();
-  }, [onMessage, query]);
+  }, [enabled, onMessage, query]);
 }

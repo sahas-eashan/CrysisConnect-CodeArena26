@@ -193,7 +193,9 @@ export default function CitizenDashboardPage() {
             )}
           </div>
           <div className="mt-6 flex gap-3">
-            <Button>Get me to safety</Button>
+            <Link href="/citizen/map">
+              <Button>Get me to safety</Button>
+            </Link>
             <Link href="/citizen/resources">
               <Button variant="outline">Request essentials</Button>
             </Link>

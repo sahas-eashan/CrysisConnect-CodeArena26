@@ -1,6 +1,14 @@
-import Link from "next/link";
-import { Activity, BellRing, MapPinned, ShieldCheck, Siren, Users } from "lucide-react";
+"use client";
 
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { generateClient } from "aws-amplify/api";
+import { BellRing, MapPinned, ShieldCheck, Siren, Users } from "lucide-react";
+
+import { useAuth } from "@/hooks/use-auth";
+import { configureAmplify } from "@/lib/aws/amplify";
+import { queries } from "@/lib/aws/graphql/operations";
+import type { DashboardStats } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
@@ -28,7 +36,70 @@ const pillars = [
   }
 ];
 
+const emptyStats: DashboardStats = {
+  activeDisasters: 0,
+  pendingSOS: 0,
+  totalResources: 0,
+  totalSafeZones: 0,
+  totalUsers: 0
+};
+
 export default function HomePage() {
+  const hasAwsConfig = Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL);
+  const { isReady, user } = useAuth();
+  const [stats, setStats] = useState<DashboardStats>(emptyStats);
+  const [loadingPulse, setLoadingPulse] = useState(hasAwsConfig);
+  const [pulseStatus, setPulseStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!hasAwsConfig) {
+      setLoadingPulse(false);
+      setPulseStatus("Live backend is not configured.");
+      return;
+    }
+
+    if (!isReady) return;
+
+    if (!user) {
+      setStats(emptyStats);
+      setLoadingPulse(false);
+      setPulseStatus("Sign in to load live command data.");
+      return;
+    }
+
+    let active = true;
+
+    async function loadPulse() {
+      configureAmplify();
+      const client = generateClient();
+
+      try {
+        setLoadingPulse(true);
+        setPulseStatus(null);
+
+        const statsResult = await client.graphql({ query: queries.getDashboardStats, authMode: "userPool" });
+
+        if (!active) return;
+
+        setStats(((statsResult as any).data?.getDashboardStats ?? emptyStats) as DashboardStats);
+      } catch (loadError) {
+        if (!active) return;
+        setStats(emptyStats);
+        setPulseStatus(loadError instanceof Error ? loadError.message : "Unable to load live command data.");
+      } finally {
+        if (active) {
+          setLoadingPulse(false);
+        }
+      }
+    }
+
+    void loadPulse();
+
+    return () => {
+      active = false;
+    };
+  }, [hasAwsConfig, isReady, user]);
+
   return (
     <main className="min-h-screen px-6 py-10">
       <div className="mx-auto flex max-w-7xl flex-col gap-10">
@@ -64,45 +135,64 @@ export default function HomePage() {
                 <p className="text-sm uppercase tracking-[0.24em] text-sky-200">Live command pulse</p>
                 <div className="mt-4 grid gap-3 sm:grid-cols-3">
                   <div className="rounded-2xl bg-danger/15 p-4">
-                    <p className="text-xs uppercase tracking-wide text-red-200">Critical alerts</p>
-                    <p className="mt-2 text-3xl font-semibold text-white">03</p>
+                    <p className="text-xs uppercase tracking-wide text-red-200">Active disasters</p>
+                    <p className="mt-2 text-3xl font-semibold text-white">
+                      {loadingPulse ? "--" : String(stats.activeDisasters).padStart(2, "0")}
+                    </p>
                   </div>
                   <div className="rounded-2xl bg-secondary/15 p-4">
                     <p className="text-xs uppercase tracking-wide text-yellow-200">Queued dispatches</p>
-                    <p className="mt-2 text-3xl font-semibold text-white">11</p>
+                    <p className="mt-2 text-3xl font-semibold text-white">
+                      {loadingPulse ? "--" : String(stats.pendingSOS).padStart(2, "0")}
+                    </p>
                   </div>
                   <div className="rounded-2xl bg-success/15 p-4">
                     <p className="text-xs uppercase tracking-wide text-emerald-200">Safe shelters</p>
-                    <p className="mt-2 text-3xl font-semibold text-white">18</p>
+                    <p className="mt-2 text-3xl font-semibold text-white">
+                      {loadingPulse ? "--" : String(stats.totalSafeZones).padStart(2, "0")}
+                    </p>
                   </div>
                 </div>
-              </div>
-
-              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                <p className="text-sm font-medium text-white">Hackathon-ready story</p>
-                <div className="mt-4 space-y-3 text-sm text-slate-200">
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3">Government registers a flood and drafts an AI-reviewed alert.</div>
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3">Citizens receive guidance in English, Sinhala, and Tamil.</div>
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3">NGOs triage SOS requests and allocate resources from one live queue.</div>
-                </div>
+                {pulseStatus ? <p className="mt-4 text-sm text-slate-300">{pulseStatus}</p> : null}
               </div>
             </div>
           </Card>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {pillars.map(({ icon: Icon, title, description }) => (
-            <Card className="border-white/10 bg-gradient-to-br from-slate-950/95 via-slate-900/90 to-sky-950/40" key={title}>
-              <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/15">
-                <Icon className="h-7 w-7 text-primary" />
-              </div>
-              <CardTitle className="mt-4">{title}</CardTitle>
-              <CardDescription className="mt-2">{description}</CardDescription>
-            </Card>
-          ))}
+        <div className="overflow-hidden">
+          <div className="homepage-pillars-marquee flex gap-4">
+            <div className="grid min-w-full shrink-0 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {pillars.map(({ icon: Icon, title, description }) => (
+                <Card
+                  className="mx-auto w-full max-w-[17rem] border-white/10 bg-gradient-to-br from-slate-950/95 via-slate-900/90 to-sky-950/40"
+                  key={title}
+                >
+                  <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/15">
+                    <Icon className="h-7 w-7 text-primary" />
+                  </div>
+                  <CardTitle className="mt-4">{title}</CardTitle>
+                  <CardDescription className="mt-2">{description}</CardDescription>
+                </Card>
+              ))}
+            </div>
+            <div aria-hidden className="grid min-w-full shrink-0 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {pillars.map(({ icon: Icon, title, description }) => (
+                <Card
+                  className="mx-auto w-full max-w-[17rem] border-white/10 bg-gradient-to-br from-slate-950/95 via-slate-900/90 to-sky-950/40"
+                  key={`repeat-${title}`}
+                >
+                  <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/15">
+                    <Icon className="h-7 w-7 text-primary" />
+                  </div>
+                  <CardTitle className="mt-4">{title}</CardTitle>
+                  <CardDescription className="mt-2">{description}</CardDescription>
+                </Card>
+              ))}
+            </div>
+          </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[1.4fr_0.9fr]">
+        <div className="grid gap-6">
           <Card className="overflow-hidden border-white/10 bg-gradient-to-br from-slate-950/95 via-slate-900/90 to-cyan-950/35">
             <div className="rounded-3xl border border-white/10 bg-black/20 p-6">
               <div className="flex items-start justify-between gap-4">
@@ -118,23 +208,6 @@ export default function HomePage() {
                 <li>Supports citizens, volunteers, NGOs, and government teams in one shared workflow.</li>
                 <li>Includes offline-safe UX patterns for queued SOS submission and cached emergency data.</li>
               </ul>
-            </div>
-          </Card>
-
-          <Card className="border-white/10 bg-gradient-to-br from-slate-950/95 via-slate-900/90 to-emerald-950/35">
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="h-5 w-5 text-primary" />
-              Demo story
-            </CardTitle>
-            <CardDescription className="mt-2">
-              Government registers a Colombo flood, citizens receive alerts, responders pick up SOS calls,
-              and resources are allocated from one command view.
-            </CardDescription>
-            <div className="mt-6 space-y-3 text-sm text-slate-300">
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-3">1. Create disaster polygon</div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-3">2. Broadcast geofenced alert</div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-3">3. Citizen sends SOS</div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-3">4. NGO accepts dispatch and allocates aid</div>
             </div>
           </Card>
         </div>
