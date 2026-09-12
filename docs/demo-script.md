@@ -13,6 +13,6 @@ Start `npm run dev`. Open `/citizen/hazards`, `/admin/hazards`, `/ngo/hazards`, 
 9. **Reporting moderation:** create a separate test report, reject it with an officer's reason, and ban that reporter through the moderation panel. Show that another hazard submission is blocked, then lift the restriction with an appeal reason and show reporting restored. Keep the audit history visible.
 10. **Public access and privacy:** open `/public-map` in a signed-out window. It shows generic active hazards, warnings and shelters without private report text, photos, resident locations or moderation records. Finally, stop location sharing in the nearby resident tab to remove its stored position and invitations.
 
-If cloud services are configured, optionally show the existing resource inventory/SOS dashboards and government alert composer. Sending real SMS/email is a separate deliberate operation; the weather replay only changes the in-app demo state.
+If cloud services are configured, optionally show the resource inventory/SOS dashboards and government alert composer. Sending real SMS/email is a separate deliberate operation; the weather replay only changes the in-app demo state.
 
 For an automated rehearsal, run `npm run test:e2e`. It drives the real report, community confirmation, moderation, urgency/council filters, automatic alert guidance, relief and clearance UI with an isolated store and fixture photos. `npm run verify:live` separately inventories configuration; follow [live validation](live-validation.md) to test configured external services.

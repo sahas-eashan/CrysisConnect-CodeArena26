@@ -18,6 +18,13 @@ const roleRedirects: Record<string, string> = {
   relief: "/relief/hazards"
 };
 
+const demoRoleRedirects: Record<string, string> = {
+  citizen: "/citizen/hazards",
+  ngo: "/ngo/hazards",
+  government: "/admin/hazards",
+  relief: "/relief/hazards"
+};
+
 function roleFromGroups(groups: string[]) {
   if (groups.includes("government")) return "government";
   if (groups.includes("relief") || groups.includes("relief_coordinator")) return "relief";
@@ -108,6 +115,40 @@ export default function LoginPage() {
     }
   }
 
+  if (!hasAwsConfig) {
+    const developmentDemo = process.env.NODE_ENV === "development";
+    return (
+      <main className="flex min-h-screen items-center justify-center p-6">
+        <Card className="w-full max-w-md">
+          <CardTitle>{developmentDemo ? "Explore CrisisConnect" : "Sign-in unavailable"}</CardTitle>
+          <CardDescription className="mt-2">
+            {developmentDemo
+              ? "Choose a role to explore the local demonstration. No account or password is needed."
+              : "Account sign-in has not been configured for this deployment."}
+          </CardDescription>
+          {developmentDemo ? (
+            <form className="mt-6 space-y-4" onSubmit={(event) => {
+              event.preventDefault();
+              router.push(demoRoleRedirects[pendingRole] ?? demoRoleRedirects.citizen);
+            }}>
+              <label className="block space-y-2 text-sm">
+                <span>Demo role</span>
+                <select className="w-full rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm" value={pendingRole} onChange={(event) => setPendingRole(event.target.value)}>
+                  <option value="citizen">Citizen</option>
+                  <option value="ngo">NGO / Field worker</option>
+                  <option value="government">Government reviewer</option>
+                  <option value="relief">Relief coordinator</option>
+                </select>
+              </label>
+              <Button className="w-full" type="submit">Open demo portal</Button>
+            </form>
+          ) : null}
+          <p className="mt-4 text-sm text-muted"><Link className="text-primary" href="/public-map">View the public map</Link></p>
+        </Card>
+      </main>
+    );
+  }
+
   return (
     <main className="flex min-h-screen items-center justify-center p-6">
       <Card className="w-full max-w-md">
@@ -115,7 +156,9 @@ export default function LoginPage() {
         <CardDescription className="mt-2">
           {mode === "newPassword"
             ? "Cognito requires a one-time password change before this account can finish signing in."
-            : "Use Cognito credentials when AWS is configured. Without env vars, the app runs in demo mode."}
+            : hasAwsConfig
+              ? "Sign in with your account to open your response portal."
+              : "Demo mode is active. Open a portal from the home page to explore."}
         </CardDescription>
         {hasAwsConfig && isReady && user ? (
           <div className="mt-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100">

@@ -5,6 +5,7 @@ node_modules
 .env.local
 .env.*.local
 citizen_android_app/dart_defines.local.json
+citizen_android_app/assets/stitch/
 dist
 coverage
 *.tfstate

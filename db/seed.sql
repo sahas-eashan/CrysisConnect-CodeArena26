@@ -1,11 +1,13 @@
+-- Synthetic demonstration data only. Do not treat these records as operational reports.
+
 INSERT INTO profiles (id, role, full_name, phone, email, location, is_available)
 VALUES
-  ('gov-demo-1', 'government', 'Disaster Control Center', '+94770000001', 'gov@crisisconnect.demo', ST_GeogFromText('POINT(79.8612 6.9271)'), true),
-  ('ngo-demo-1', 'ngo_org_member', 'Ayesha Perera', '+94770000002', 'ayesha@ngo.demo', ST_GeogFromText('POINT(79.8700 6.9300)'), true),
-  ('ngo-demo-2', 'ngo_individual', 'Ruwan Silva', '+94770000003', 'ruwan@ngo.demo', ST_GeogFromText('POINT(79.8760 6.9350)'), true),
-  ('citizen-demo-1', 'citizen', 'Nuwan Dhananjaya', '+94769635843', 'nuwan@demo.com', ST_GeogFromText('POINT(79.8685 6.9240)'), true),
-  ('citizen-demo-2', 'citizen', 'Sahas Eashan', '+94776413121', 'sahas@demo.com', ST_GeogFromText('POINT(79.8820 6.9400)'), true),
-  ('citizen-demo-3', 'citizen', 'Himeth Walgampaya', '+94742885820', 'himeth@demo.com', ST_GeogFromText('POINT(79.8740 6.9365)'), true)
+  ('gov-demo-1', 'government', 'Demo Government Officer', NULL, 'government@example.org', ST_GeogFromText('POINT(79.8612 6.9271)'), true),
+  ('ngo-demo-1', 'ngo_org_member', 'Demo NGO Coordinator', NULL, 'ngo-coordinator@example.org', ST_GeogFromText('POINT(79.8700 6.9300)'), true),
+  ('ngo-demo-2', 'ngo_individual', 'Demo NGO Volunteer', NULL, 'ngo-volunteer@example.org', ST_GeogFromText('POINT(79.8760 6.9350)'), true),
+  ('citizen-demo-1', 'citizen', 'Demo Citizen One', NULL, 'citizen-one@example.org', ST_GeogFromText('POINT(79.8685 6.9240)'), true),
+  ('citizen-demo-2', 'citizen', 'Demo Citizen Two', NULL, 'citizen-two@example.org', ST_GeogFromText('POINT(79.8820 6.9400)'), true),
+  ('citizen-demo-3', 'citizen', 'Demo Citizen Three', NULL, 'citizen-three@example.org', ST_GeogFromText('POINT(79.8740 6.9365)'), true)
 ON CONFLICT (id) DO UPDATE
 SET role = EXCLUDED.role,
     full_name = EXCLUDED.full_name,
@@ -98,6 +100,6 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO ai_audit_logs (id, action, role, user_id, model, status, review_status, confidence, source_ids, warnings, created_at)
 VALUES
-  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'generateIncidentBrief', 'government', 'gov-demo-1', 'gemini-2.5-pro', 'completed', 'approved', 0.84, ARRAY['22222222-2222-2222-2222-222222222222'], ARRAY['Human-reviewed in demo environment.'], now() - interval '15 minutes'),
-  ('cccccccc-cccc-cccc-cccc-cccccccccccc', 'triageSosCase', 'ngo', 'ngo-demo-1', 'gemini-2.5-flash', 'completed', 'pending_review', 0.80, ARRAY['88888888-8888-8888-8888-888888888888'], ARRAY['Responder assignment still requires operator confirmation.'], now() - interval '5 minutes')
+  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'generateIncidentBrief', 'government', 'gov-demo-1', 'synthetic-demo', 'demo_fixture', 'not_applicable', NULL, ARRAY['22222222-2222-2222-2222-222222222222'], ARRAY['Synthetic demonstration fixture; no Gemini request or human approval was performed.'], now() - interval '15 minutes'),
+  ('cccccccc-cccc-cccc-cccc-cccccccccccc', 'triageSosCase', 'ngo', 'ngo-demo-1', 'synthetic-demo', 'demo_fixture', 'not_applicable', NULL, ARRAY['88888888-8888-8888-8888-888888888888'], ARRAY['Synthetic demonstration fixture; no Gemini request or responder assignment was performed.'], now() - interval '5 minutes')
 ON CONFLICT (id) DO NOTHING;

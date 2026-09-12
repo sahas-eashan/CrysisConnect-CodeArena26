@@ -64,7 +64,7 @@ export function HazardMap({ snapshot, point, role = "citizen", extraMarkers = []
 
   return <Card>
     <CardTitle>Hazards, shelters and route checks</CardTitle>
-    <CardDescription className="mt-2">Confirmed hazards appear in red; shelters in green; supplies in amber. Hazard boundaries are reported risk areas.</CardDescription>
+    <CardDescription className="mt-2">Confirmed hazards appear in red; shelters in green; supplies in amber. Red circles mark precautionary exclusion areas around hazards.</CardDescription>
     {snapshot.fixtureShelters ? <p className="mt-2 text-xs text-amber-300">Shelters shown for this local demonstration are sample locations.</p> : null}
     <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_18rem]">
       <MapView center={mapCenter} markers={markers} polygons={polygons} route={displayedRoute?.status === "available" ? displayedRoute.coordinates : []} className="max-h-[32rem]" />

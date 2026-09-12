@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
@@ -12,6 +13,7 @@ export default function RegisterPage() {
   const [stage, setStage] = useState<"register" | "confirm">("register");
   const [username, setUsername] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const hasAwsConfig = Boolean(process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID);
 
   async function handleRegister(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -22,7 +24,7 @@ export default function RegisterPage() {
     await register(email, password, email);
     setUsername(email);
     setStage("confirm");
-    setMessage("Confirmation code sent. In demo mode this page still works as a placeholder for the Cognito flow.");
+    setMessage("Check your email for the confirmation code.");
   }
 
   async function handleConfirm(event: FormEvent<HTMLFormElement>) {
@@ -34,26 +36,34 @@ export default function RegisterPage() {
     setMessage("Registration confirmed. You can now sign in.");
   }
 
+  if (!hasAwsConfig) {
+    const developmentDemo = process.env.NODE_ENV === "development";
+    return (
+      <main className="flex min-h-screen items-center justify-center p-6">
+        <Card className="w-full max-w-lg">
+          <CardTitle>{developmentDemo ? "Explore without registering" : "Registration unavailable"}</CardTitle>
+          <CardDescription className="mt-2">
+            {developmentDemo
+              ? "The local demonstration uses sample roles. No account or password is needed."
+              : "Account registration has not been configured for this deployment."}
+          </CardDescription>
+          <p className="mt-6 text-sm"><Link className="text-primary" href={developmentDemo ? "/login" : "/public-map"}>{developmentDemo ? "Open demo portals" : "View the public map"}</Link></p>
+        </Card>
+      </main>
+    );
+  }
+
   return (
     <main className="flex min-h-screen items-center justify-center p-6">
       <Card className="w-full max-w-lg">
         <CardTitle>Register for CrisisConnect</CardTitle>
         <CardDescription className="mt-2">
-          Citizens self-register. Large NGOs still require approval inside the government portal after signup.
+          Create a citizen account. Response-team access is assigned by administrators.
         </CardDescription>
         {stage === "register" ? (
           <form className="mt-6 grid gap-4 md:grid-cols-2" onSubmit={handleRegister}>
-            <Input className="md:col-span-2" name="fullName" placeholder="Full name" required />
             <Input name="email" placeholder="Email" required type="email" />
-            <Input name="phone" placeholder="Phone number" />
             <Input name="password" placeholder="Password" required type="password" />
-            <select
-              className="rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm"
-              name="role"
-            >
-              <option value="citizen">Citizen</option>
-              <option value="ngo">NGO / Field worker</option>
-            </select>
             <Button className="md:col-span-2" type="submit">
               Create account
             </Button>

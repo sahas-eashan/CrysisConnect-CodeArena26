@@ -9,6 +9,27 @@ test.beforeAll(async () => {
 const point = { latitude: 6.952, longitude: 79.88 };
 test.use({ geolocation: point, permissions: ["geolocation"] });
 
+test("development demo opens citizen and relief portals without account credentials", async ({ page, context }) => {
+  const authRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("cognito-idp.") || request.url().includes("/api/auth/session")) authRequests.push(request.url());
+  });
+  await page.goto("/register");
+  await expect(page.getByText("Explore without registering", { exact: true })).toBeVisible();
+  await expect(page.locator('input[type="password"]')).toHaveCount(0);
+  await page.getByRole("link", { name: "Open demo portals", exact: true }).click();
+  for (const role of ["citizen", "relief"]) {
+    await page.goto("/login");
+    await expect(page.locator('input[type="password"]')).toHaveCount(0);
+    await page.getByRole("combobox", { name: "Demo role", exact: true }).selectOption(role);
+    await page.getByRole("button", { name: "Open demo portal", exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/${role}/hazards$`));
+    await expect(page.getByText(/^Local demonstration ·/)).toBeVisible();
+  }
+  expect(authRequests).toEqual([]);
+  expect((await context.cookies()).some((cookie) => cookie.name === "cc-session")).toBe(false);
+});
+
 test("citizen photo report, officer verification, relief, crew clearance and citizen update", async ({ page, context }, testInfo) => {
   const title = `Road hazard ${Date.now()}`;
   await page.goto("/citizen/hazards");
