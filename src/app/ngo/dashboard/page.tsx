@@ -21,6 +21,7 @@ type DashboardState = {
 
 export default function NgoDashboardPage() {
   const hasAwsConfig = Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL);
+  const [loading, setLoading] = useState(hasAwsConfig);
   const [state, setState] = useState<DashboardState>(() => ({
     activeDisasters: hasAwsConfig ? [] : mockDisasters,
     disaster: hasAwsConfig ? null : mockDisasters[0] ?? null,
@@ -41,6 +42,7 @@ export default function NgoDashboardPage() {
 
       try {
         setError(null);
+        setLoading(true);
 
         const [disastersResult, resourcesResult, requestsResult, sosResult] = await Promise.allSettled([
           client.graphql({
@@ -118,6 +120,10 @@ export default function NgoDashboardPage() {
       } catch (loadError) {
         if (!active) return;
         setError(loadError instanceof Error ? loadError.message : "Unable to load live NGO dashboard data.");
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
       }
     }
 
@@ -132,20 +138,31 @@ export default function NgoDashboardPage() {
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Link href="/ngo/map">
-          <StatCard helper="Currently active incidents" label="Active disasters" value={state.activeDisasters.length} />
+          <StatCard
+            helper="Currently active incidents"
+            label="Active disasters"
+            loading={loading}
+            value={state.activeDisasters.length}
+          />
         </Link>
         <Link href="/ngo/resources">
-          <StatCard helper="Published inventory items" label="Tracked resources" value={state.resources.length} />
+          <StatCard
+            helper="Published inventory items"
+            label="Tracked resources"
+            loading={loading}
+            value={state.resources.length}
+          />
         </Link>
         <Link href="/ngo/resources">
           <StatCard
             helper="Requests from citizens"
             label="Pending resource requests"
+            loading={loading}
             value={state.pendingRequests.length}
           />
         </Link>
         <Link href="/ngo/sos-queue">
-          <StatCard helper="Needs rapid triage" label="Open SOS queue" value={state.sosSignals.length} />
+          <StatCard helper="Needs rapid triage" label="Open SOS queue" loading={loading} value={state.sosSignals.length} />
         </Link>
       </div>
 
