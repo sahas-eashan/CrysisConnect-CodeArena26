@@ -2,6 +2,8 @@ resource "terraform_data" "bootstrap_database" {
   triggers_replace = [
     aws_db_instance.postgres.id,
     filesha256("${path.module}/../db/migrations/001_schema.sql"),
+    filesha256("${path.module}/../db/migrations/002_hazards.sql"),
+    filesha256("${path.module}/../scripts/bootstrap-db.mjs"),
     filesha256("${path.module}/../db/seed.sql")
   ]
 

@@ -12,6 +12,7 @@ import {
 } from "aws-amplify/auth";
 
 import { configureAmplify } from "@/lib/aws/amplify";
+import { persistVerifiedSession } from "@/lib/auth-session";
 
 type AuthState = {
   user?: string;
@@ -55,6 +56,7 @@ export function useAuth() {
       const currentUser = await getCurrentUser();
       const session = await fetchAuthSession();
       const groups = (session.tokens?.idToken?.payload["cognito:groups"] as string[] | undefined) ?? [];
+      await persistVerifiedSession();
 
       setState({
         user: currentUser.signInDetails?.loginId ?? currentUser.username,
@@ -119,6 +121,7 @@ export function useAuth() {
         if (process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID) {
           await signOut();
         }
+        await fetch("/api/auth/logout", { redirect: "manual" });
         setState({ user: undefined, groups: [], isReady: true });
       }
     }),

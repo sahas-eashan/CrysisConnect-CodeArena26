@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
+import { persistVerifiedSession } from "@/lib/auth-session";
 
 const roleRedirects: Record<string, string> = {
   citizen: "/citizen/dashboard",
@@ -18,7 +19,7 @@ const roleRedirects: Record<string, string> = {
 
 function roleFromGroups(groups: string[]) {
   if (groups.includes("government")) return "government";
-  if (groups.includes("ngo")) return "ngo";
+  if (groups.some((group) => ["ngo", "ngo_individual", "ngo_org_member"].includes(group))) return "ngo";
   return "citizen";
 }
 
@@ -35,15 +36,13 @@ export default function LoginPage() {
   async function continueAsSignedInUser() {
     const role = hasAwsConfig ? signedInRole : pendingRole;
 
-    await fetch("/api/auth/session", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ role })
-    });
-
-    router.push(roleRedirects[role] ?? "/");
+    try {
+      setError(null);
+      await persistVerifiedSession();
+      router.push(roleRedirects[role] ?? "/");
+    } catch (sessionError) {
+      setError(sessionError instanceof Error ? sessionError.message : "Unable to open portal.");
+    }
   }
 
   async function signOutCurrentUser() {
@@ -93,13 +92,7 @@ export default function LoginPage() {
         role = roleFromGroups(groups);
       }
 
-      await fetch("/api/auth/session", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ role })
-      });
+      await persistVerifiedSession();
       router.push(roleRedirects[role] ?? "/");
     } catch (submitError) {
       const nextError = submitError instanceof Error ? submitError.message : "Unable to sign in.";

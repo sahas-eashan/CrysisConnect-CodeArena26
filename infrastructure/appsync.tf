@@ -104,15 +104,15 @@ EOF
 
 locals {
   ai_fields = {
-    "Query.getCitizenGuidance"            = "Query"
-    "Query.getAiAuditLogs"                = "Query"
-    "Mutation.generateIncidentBrief"      = "Mutation"
-    "Mutation.generateAlertDraft"         = "Mutation"
-    "Mutation.recommendOperations"        = "Mutation"
-    "Mutation.triageSosCase"              = "Mutation"
-    "Mutation.recommendResourceDispatch"  = "Mutation"
-    "Mutation.prepareSosSubmission"       = "Mutation"
-    "Mutation.reviewAiAuditLog"           = "Mutation"
+    "Query.getCitizenGuidance"           = "Query"
+    "Query.getAiAuditLogs"               = "Query"
+    "Mutation.generateIncidentBrief"     = "Mutation"
+    "Mutation.generateAlertDraft"        = "Mutation"
+    "Mutation.recommendOperations"       = "Mutation"
+    "Mutation.triageSosCase"             = "Mutation"
+    "Mutation.recommendResourceDispatch" = "Mutation"
+    "Mutation.prepareSosSubmission"      = "Mutation"
+    "Mutation.reviewAiAuditLog"          = "Mutation"
   }
 }
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { authenticateRequest, demoEnabled } from "@/lib/server-auth";
 
 const guardedPrefixes = {
   "/citizen": ["citizen", "ngo", "government"],
@@ -6,19 +7,21 @@ const guardedPrefixes = {
   "/admin": ["government"]
 } as const;
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (!Object.keys(guardedPrefixes).some((prefix) => pathname.startsWith(prefix))) {
     return NextResponse.next();
   }
 
-  if (!process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID) {
+  if (demoEnabled()) {
     return NextResponse.next();
   }
 
-  const role = request.cookies.get("cc-role")?.value;
-  if (!role) {
+  let role: string;
+  try {
+    role = (await authenticateRequest(request)).role;
+  } catch {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 

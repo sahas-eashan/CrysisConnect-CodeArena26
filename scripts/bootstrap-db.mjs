@@ -36,6 +36,7 @@ async function waitForDatabase() {
 
 await waitForDatabase();
 await executeSqlFile(schemaFile);
+await executeSqlFile("db/migrations/002_hazards.sql");
 await executeSqlFile(seedFile);
 
 console.log("Database bootstrap completed successfully.");
