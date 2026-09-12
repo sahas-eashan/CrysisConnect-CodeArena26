@@ -27,6 +27,10 @@ const pool = new Pool({
 
 const lambdaClient = new LambdaClient({});
 
+type DbClient = {
+  query: (text: string, values?: any[]) => Promise<{ rows: Record<string, any>[] }>;
+};
+
 function getGroups(event: AppSyncEvent) {
   const rawGroups = event.identity?.claims?.["cognito:groups"];
   if (Array.isArray(rawGroups)) return rawGroups as string[];
@@ -38,6 +42,55 @@ function requireGroup(event: AppSyncEvent, allowed: string[]) {
   const groups = getGroups(event);
   if (allowed.some((group) => groups.includes(group))) return;
   throw new Error("Unauthorized");
+}
+
+function getProfileRole(event: AppSyncEvent) {
+  const groups = getGroups(event);
+  if (groups.includes("government")) return "government";
+  if (groups.includes("ngo_org_member")) return "ngo_org_member";
+  if (groups.includes("ngo_individual")) return "ngo_individual";
+
+  const roleClaim = event.identity?.claims?.["custom:role"];
+  if (
+    roleClaim === "government" ||
+    roleClaim === "ngo_org_member" ||
+    roleClaim === "ngo_individual" ||
+    roleClaim === "citizen"
+  ) {
+    return roleClaim;
+  }
+
+  return "citizen";
+}
+
+function getProfileName(event: AppSyncEvent, userId: string) {
+  const claims = event.identity?.claims ?? {};
+  const candidates = [claims.name, claims.email, claims.phone_number]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .map((value) => value.trim());
+
+  return candidates[0] ?? `Citizen ${userId.slice(0, 8)}`;
+}
+
+async function ensureProfile(client: DbClient, event: AppSyncEvent, userId: string) {
+  await client.query(
+    `INSERT INTO profiles (id, role, full_name, phone, email, is_available)
+     VALUES ($1, $2::user_role, $3, $4, $5, true)
+     ON CONFLICT (id) DO UPDATE
+     SET role = COALESCE(profiles.role, EXCLUDED.role),
+         full_name = COALESCE(NULLIF(profiles.full_name, ''), EXCLUDED.full_name),
+         phone = COALESCE(profiles.phone, EXCLUDED.phone),
+         email = COALESCE(profiles.email, EXCLUDED.email)`,
+    [
+      userId,
+      getProfileRole(event),
+      getProfileName(event, userId),
+      typeof event.identity?.claims?.phone_number === "string"
+        ? event.identity.claims.phone_number
+        : null,
+      typeof event.identity?.claims?.email === "string" ? event.identity.claims.email : null
+    ]
+  );
 }
 
 function geoJsonSql(value: string | null | undefined) {
@@ -432,6 +485,7 @@ export async function handler(event: AppSyncEvent) {
     }
     case "requestResource": {
       const input = args.input;
+      await ensureProfile(pool, event, userId);
       const { rows } = await pool.query(
         `INSERT INTO resource_requests (requested_by, resource_id, resource_name, quantity_needed, urgency, status, location)
          VALUES ($1, $2, $3, $4, $5, 'pending', ${geoJsonSql(input.location)})
@@ -456,6 +510,7 @@ export async function handler(event: AppSyncEvent) {
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
+        await ensureProfile(client, event, userId);
         const insert = await client.query(
           `INSERT INTO sos_signals (sender_id, location, type, description, status, disaster_id)
            VALUES ($1, ${geoJsonSql(input.location)}, $2, $3, 'pending', $4)
