@@ -1,15 +1,23 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { generateClient } from "aws-amplify/api";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useGeolocation } from "@/hooks/use-geolocation";
+import { configureAmplify } from "@/lib/aws/amplify";
+import { mutations, queries } from "@/lib/aws/graphql/operations";
 import { mockSOSSignals } from "@/lib/mock-data";
+import type { SOSSignal } from "@/lib/types";
 
 export default function CitizenSOSPage() {
+  const hasAwsConfig = Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL);
+  const [signals, setSignals] = useState<SOSSignal[]>(() => (hasAwsConfig ? [] : mockSOSSignals));
   const [message, setMessage] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const { coordinates, error, loading, requestLocation } = useGeolocation();
 
   const geoJson = useMemo(() => {
@@ -20,13 +28,97 @@ export default function CitizenSOSPage() {
     });
   }, [coordinates]);
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    if (!hasAwsConfig) return;
+
+    let active = true;
+
+    async function loadSignals() {
+      configureAmplify();
+      const client = generateClient();
+
+      try {
+        setSubmitError(null);
+        const result = await client.graphql({ query: queries.getMySOSSignals });
+        if (!active) return;
+
+        setSignals(((result as any).data?.getMySOSSignals ?? []) as SOSSignal[]);
+      } catch (loadError) {
+        if (!active) return;
+
+        setSignals([]);
+        setSubmitError(loadError instanceof Error ? loadError.message : "Unable to load your SOS signals.");
+      }
+    }
+
+    void loadSignals();
+
+    return () => {
+      active = false;
+    };
+  }, [hasAwsConfig]);
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setMessage(
-      geoJson
-        ? `SOS ready for AppSync mutation with location ${geoJson}. Nearest responders will be notified immediately.`
-        : "Capture your location first so the system can route the SOS to the closest responders."
-    );
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const type = String(form.get("type") ?? "medical");
+    const description = String(form.get("description") ?? "").trim();
+
+    if (!geoJson) {
+      setMessage("Capture your location first so the system can route the SOS to the closest responders.");
+      return;
+    }
+
+    if (!hasAwsConfig) {
+      setSignals((current) => [
+        {
+          id: `demo-sos-${Date.now()}`,
+          senderId: "demo-citizen",
+          location: geoJson,
+          type,
+          description,
+          status: "pending",
+          createdAt: new Date().toISOString()
+        },
+        ...current
+      ]);
+      setMessage("Demo mode: SOS saved locally.");
+      return;
+    }
+
+    configureAmplify();
+    const client = generateClient();
+
+    try {
+      setSaving(true);
+      setSubmitError(null);
+      setMessage(null);
+
+      const result = await client.graphql({
+        query: mutations.createSOS,
+        variables: {
+          input: {
+            location: geoJson,
+            type,
+            description: description || null
+          }
+        }
+      });
+
+      const createdSignal = (result as any).data?.createSOS as SOSSignal | undefined;
+      if (!createdSignal?.id) {
+        throw new Error("The backend did not return a saved SOS signal.");
+      }
+
+      setSignals((current) => [createdSignal, ...current]);
+      formElement.reset();
+      setMessage("SOS saved to the real backend and sent for response.");
+    } catch (submitErrorValue) {
+      setSubmitError(submitErrorValue instanceof Error ? submitErrorValue.message : "Unable to save your SOS.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -55,24 +147,30 @@ export default function CitizenSOSPage() {
             <option value="resources">Urgent essentials needed</option>
           </select>
           <Input name="description" placeholder="Describe the situation" />
-          <Button className="w-full" type="submit" variant="danger">
-            Send SOS
+          <Button className="w-full" disabled={saving} type="submit" variant="danger">
+            {saving ? "Sending..." : "Send SOS"}
           </Button>
         </form>
         {message ? <p className="mt-4 text-sm text-muted">{message}</p> : null}
+        {submitError ? <p className="mt-4 text-sm text-danger">{submitError}</p> : null}
       </Card>
 
       <Card>
-        <CardTitle>Live response status</CardTitle>
-        <CardDescription className="mt-2">Track responder assignment and rescue progress in real time.</CardDescription>
+        <CardTitle>Your SOS signals</CardTitle>
+        <CardDescription className="mt-2">Your saved SOS requests and their current backend status.</CardDescription>
         <div className="mt-6 space-y-3">
-          {mockSOSSignals.map((signal) => (
+          {signals.map((signal) => (
             <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4" key={signal.id}>
               <p className="font-medium text-white">{signal.type}</p>
               <p className="mt-1 text-sm text-muted">{signal.description}</p>
               <p className="mt-3 text-xs uppercase tracking-wide text-primary">Status: {signal.status}</p>
             </div>
           ))}
+          {!signals.length ? (
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-muted">
+              You do not have any SOS signals yet.
+            </div>
+          ) : null}
         </div>
       </Card>
     </div>
