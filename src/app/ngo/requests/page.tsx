@@ -7,16 +7,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { configureAmplify } from "@/lib/aws/amplify";
 import { mutations, queries, subscriptions } from "@/lib/aws/graphql/operations";
-import { mockResourceRequests } from "@/lib/mock-data";
-import type { ResourceRequest } from "@/lib/types";
+import { mockResourceRequests, mockResources } from "@/lib/mock-data";
+import type { Resource, ResourceRequest } from "@/lib/types";
 
 function sortRequests(requests: ResourceRequest[]) {
   const priorityWeight: Record<string, number> = {
-    high: 0,
-    urgent: 0,
-    medium: 1,
+    critical: 0,
+    high: 1,
+    urgent: 1,
     normal: 2,
-    low: 3
+    medium: 3,
+    low: 4
   };
 
   return [...requests].sort((left, right) => {
@@ -30,6 +31,7 @@ function sortRequests(requests: ResourceRequest[]) {
 export default function NgoRequestsPage() {
   const hasAwsConfig = Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL);
   const [requests, setRequests] = useState<ResourceRequest[]>(() => (hasAwsConfig ? [] : mockResourceRequests));
+  const [resources, setResources] = useState<Resource[]>(() => (hasAwsConfig ? [] : mockResources));
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL));
   const [fulfillingId, setFulfillingId] = useState<string | null>(null);
@@ -47,20 +49,56 @@ export default function NgoRequestsPage() {
       setError(null);
 
       try {
-        const result = await client.graphql({
-          query: queries.getResourceRequests,
-          authMode: "userPool",
-          variables: { status: "pending" }
-        });
+        const [requestsResult, resourcesResult] = await Promise.allSettled([
+          client.graphql({
+            query: queries.getResourceRequests,
+            authMode: "userPool",
+            variables: { status: "pending" }
+          }),
+          client.graphql({
+            query: queries.getResources,
+            authMode: "userPool"
+          })
+        ]);
 
         if (!active) return;
 
-        const nextRequests = ((result as any).data?.getResourceRequests ?? []) as ResourceRequest[];
-        setRequests(sortRequests(nextRequests));
+        if (requestsResult.status === "fulfilled") {
+          const nextRequests = ((requestsResult.value as any).data?.getResourceRequests ?? []) as ResourceRequest[];
+          setRequests(sortRequests(nextRequests));
+        } else {
+          setRequests([]);
+        }
+
+        if (resourcesResult.status === "fulfilled") {
+          const nextResources = ((resourcesResult.value as any).data?.getResources ?? []) as Resource[];
+          setResources(nextResources);
+        } else {
+          setResources([]);
+        }
+
+        if (requestsResult.status === "rejected") {
+          const nextError =
+            requestsResult.reason instanceof Error
+              ? requestsResult.reason.message
+              : "Unable to load citizen requests.";
+          setError(
+            nextError.includes("Unauthorized")
+              ? "This Cognito account is not in the NGO or government group, so live citizen requests cannot be loaded here."
+              : nextError
+          );
+        } else if (resourcesResult.status === "rejected") {
+          setError(
+            resourcesResult.reason instanceof Error
+              ? resourcesResult.reason.message
+              : "Unable to load current resource inventory."
+          );
+        }
       } catch (loadError) {
         if (!active) return;
 
         setRequests([]);
+        setResources([]);
         const nextError = loadError instanceof Error ? loadError.message : "Unable to load citizen requests.";
         setError(
           nextError.includes("Unauthorized")
@@ -96,6 +134,18 @@ export default function NgoRequestsPage() {
     () => requests.filter((request) => (request.status ?? "pending").toLowerCase() !== "fulfilled"),
     [requests]
   );
+
+  const resourceLookup = useMemo(() => {
+    const byId = new Map<string, Resource>();
+    const byName = new Map<string, Resource>();
+
+    resources.forEach((resource) => {
+      byId.set(resource.id, resource);
+      byName.set(resource.name.trim().toLowerCase(), resource);
+    });
+
+    return { byId, byName };
+  }, [resources]);
 
   async function onFulfill(id: string) {
     if (!hasAwsConfig) {
@@ -146,19 +196,37 @@ export default function NgoRequestsPage() {
           </div>
         ) : null}
         <div className="mt-6 space-y-3">
-          {pendingRequests.map((request) => (
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4" key={request.id}>
-              <p className="font-medium text-white">{request.resourceName ?? "Unnamed request"}</p>
-              <p className="mt-1 text-sm text-muted">
-                Needs {request.quantityNeeded ?? 0} • {(request.urgency ?? "normal").toLowerCase()} priority
-              </p>
-              <div className="mt-3">
-                <Button disabled={fulfillingId === request.id} onClick={() => void onFulfill(request.id)}>
-                  {fulfillingId === request.id ? "Saving..." : "Mark as fulfilled"}
-                </Button>
+          {pendingRequests.map((request) => {
+            const matchingResource =
+              (request.resourceId ? resourceLookup.byId.get(request.resourceId) : undefined) ??
+              (request.resourceName ? resourceLookup.byName.get(request.resourceName.trim().toLowerCase()) : undefined);
+
+            return (
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4" key={request.id}>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="font-medium text-white">{request.resourceName ?? "Unnamed request"}</p>
+                    <p className="mt-1 text-sm text-muted">
+                      Needs {request.quantityNeeded ?? 0} • {(request.urgency ?? "normal").toLowerCase()} priority
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs uppercase tracking-wide text-slate-400">Available now</p>
+                    <p className="mt-1 text-sm text-slate-300">
+                      {matchingResource
+                        ? `${matchingResource.quantity ?? 0} ${matchingResource.unit ?? "units"}`
+                        : "Not found"}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <Button disabled={fulfillingId === request.id} onClick={() => void onFulfill(request.id)}>
+                    {fulfillingId === request.id ? "Saving..." : "Mark as fulfilled"}
+                  </Button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           {!pendingRequests.length && !loading ? (
             <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-muted">
               No pending citizen requests right now.
