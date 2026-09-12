@@ -6,6 +6,7 @@ import { generateClient } from "aws-amplify/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useGeolocation } from "@/hooks/use-geolocation";
 import { configureAmplify } from "@/lib/aws/amplify";
 import { mutations, queries, subscriptions } from "@/lib/aws/graphql/operations";
 import { mockResourceRequests, mockResources } from "@/lib/mock-data";
@@ -87,6 +88,7 @@ export default function NgoResourcesPage() {
   const [fulfillingId, setFulfillingId] = useState<string | null>(null);
   const [savingResource, setSavingResource] = useState(false);
   const [form, setForm] = useState<ResourceFormState>(defaultForm);
+  const { coordinates, error: locationError, loading: locationLoading, requestLocation } = useGeolocation();
 
   useEffect(() => {
     if (!hasAwsConfig) return;
@@ -165,6 +167,18 @@ export default function NgoResourcesPage() {
       unsubscribeRequestUpdates.unsubscribe();
     };
   }, [hasAwsConfig]);
+
+  useEffect(() => {
+    if (!coordinates) return;
+
+    setForm((current) => ({
+      ...current,
+      location: JSON.stringify({
+        type: "Point",
+        coordinates: [coordinates.longitude, coordinates.latitude]
+      })
+    }));
+  }, [coordinates]);
 
   const pendingRequests = useMemo(
     () => requests.filter((request) => (request.status ?? "pending").toLowerCase() !== "fulfilled"),
@@ -355,6 +369,17 @@ export default function NgoResourcesPage() {
             value={form.location}
             onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))}
           />
+          <div className="flex flex-wrap items-center gap-3">
+            <Button onClick={requestLocation} type="button" variant="outline">
+              {locationLoading ? "Getting location..." : "Get current location"}
+            </Button>
+            {coordinates ? (
+              <span className="rounded-full bg-success/15 px-3 py-2 text-sm text-green-300">
+                {coordinates.latitude.toFixed(4)}, {coordinates.longitude.toFixed(4)}
+              </span>
+            ) : null}
+          </div>
+          {locationError ? <p className="text-sm text-danger">{locationError}</p> : null}
           <Button className="w-full" disabled={savingResource} type="submit">
             {savingResource ? "Saving..." : "Save resource update"}
           </Button>

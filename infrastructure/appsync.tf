@@ -38,6 +38,8 @@ locals {
     "Query.getResourceRequests"        = "Query"
     "Query.getMyResourceRequests"      = "Query"
     "Query.getSOSSignals"              = "Query"
+    "Query.getMySOSSignals"            = "Query"
+    "Query.getAlerts"                  = "Query"
     "Query.getNewsUpdates"             = "Query"
     "Query.getOrganizations"           = "Query"
     "Query.getDashboardStats"          = "Query"
