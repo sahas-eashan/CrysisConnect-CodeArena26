@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { generateClient } from "aws-amplify/api";
+import { getCurrentUser } from "aws-amplify/auth";
 
 import { CitizenSosCoach } from "@/components/ai/citizen-sos-coach";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,7 @@ import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useGeolocation } from "@/hooks/use-geolocation";
 import { configureAmplify } from "@/lib/aws/amplify";
-import { mutations, queries } from "@/lib/aws/graphql/operations";
+import { mutations, queries, subscriptions } from "@/lib/aws/graphql/operations";
 import type { SOSSignal } from "@/lib/types";
 
 export default function CitizenSOSPage() {
@@ -18,6 +19,7 @@ export default function CitizenSOSPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
   const [sosType, setSosType] = useState("medical");
   const [description, setDescription] = useState("");
   const { coordinates, error, loading, requestLocation } = useGeolocation();
@@ -34,29 +36,63 @@ export default function CitizenSOSPage() {
     if (!hasAwsConfig) return;
 
     let active = true;
+    let inFlight = false;
+    let subscription: { unsubscribe: () => void } | undefined;
+    configureAmplify();
+    const client = generateClient();
 
     async function loadSignals() {
-      configureAmplify();
-      const client = generateClient();
-
+      if (inFlight || !active) return;
+      inFlight = true;
       try {
-        setSubmitError(null);
-        const result = await client.graphql({ query: queries.getMySOSSignals });
+        const result = await client.graphql({ query: queries.getMySOSSignals, authMode: "userPool" });
         if (!active) return;
 
         setSignals(((result as any).data?.getMySOSSignals ?? []) as SOSSignal[]);
+        setStatusError(null);
       } catch (loadError) {
         if (!active) return;
+        setStatusError(loadError instanceof Error ? loadError.message : "Unable to refresh your SOS status. Retrying shortly.");
+      } finally {
+        inFlight = false;
+      }
+    }
 
-        setSignals([]);
-        setSubmitError(loadError instanceof Error ? loadError.message : "Unable to load your SOS signals.");
+    async function subscribeToStatus() {
+      try {
+        const user = await getCurrentUser();
+        if (!active) return;
+        const observable = client.graphql({
+          query: subscriptions.onMySOSUpdate,
+          variables: { senderId: user.userId },
+          authMode: "userPool"
+        }) as unknown as {
+          subscribe: (observer: { next: (event: { data?: { onMySOSUpdate?: SOSSignal } }) => void; error: () => void }) => { unsubscribe: () => void };
+        };
+        subscription = observable.subscribe({
+          next: ({ data }) => {
+            if (!active || !data?.onMySOSUpdate) return;
+            const updated = data.onMySOSUpdate;
+            setSignals((current) => current.map((signal) => signal.id === updated.id ? { ...signal, ...updated } : signal));
+            void loadSignals();
+          },
+          error: () => {
+            if (active) setStatusError("Live status connection interrupted. Status refresh continues every 15 seconds.");
+          }
+        });
+      } catch {
+        if (active) setStatusError("Live status connection unavailable. Status refresh continues every 15 seconds.");
       }
     }
 
     void loadSignals();
+    void subscribeToStatus();
+    const timer = window.setInterval(() => void loadSignals(), 15000);
 
     return () => {
       active = false;
+      window.clearInterval(timer);
+      subscription?.unsubscribe();
     };
   }, [hasAwsConfig]);
 
@@ -87,6 +123,7 @@ export default function CitizenSOSPage() {
 
       const result = await client.graphql({
         query: mutations.createSOS,
+        authMode: "userPool",
         variables: {
           input: {
             location: geoJson,
@@ -167,13 +204,16 @@ export default function CitizenSOSPage() {
 
       <Card>
         <CardTitle>Your SOS signals</CardTitle>
-        <CardDescription className="mt-2">Your saved SOS requests and their current backend status.</CardDescription>
+        <CardDescription className="mt-2">Your saved requests update as responders accept and resolve them.</CardDescription>
+        {statusError ? <p className="mt-3 text-sm text-amber-300" role="status">{statusError}</p> : null}
         <div className="mt-6 space-y-3">
           {signals.map((signal) => (
             <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4" key={signal.id}>
               <p className="font-medium text-white">{signal.type}</p>
               <p className="mt-1 text-sm text-muted">{signal.description}</p>
               <p className="mt-3 text-xs uppercase tracking-wide text-primary">Status: {signal.status}</p>
+              {signal.assignedTo ? <p className="mt-2 text-sm text-muted">A responder has been assigned.</p> : null}
+              {signal.resolvedAt ? <p className="mt-2 text-sm text-green-300">Resolved {new Date(signal.resolvedAt).toLocaleString()}</p> : null}
             </div>
           ))}
           {!signals.length ? (

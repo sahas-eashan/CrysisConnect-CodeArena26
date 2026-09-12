@@ -2,6 +2,7 @@ import { PortalShell } from "@/components/shared/portal-shell";
 
 const items = [
   { href: "/ngo/dashboard", label: "Dashboard" },
+  { href: "/ngo/hazards", label: "Hazard Field Queue" },
   { href: "/ngo/resources", label: "Resources" },
   { href: "/ngo/requests", label: "Requests" },
   { href: "/ngo/map", label: "Operations Map" },

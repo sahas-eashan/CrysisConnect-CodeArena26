@@ -1,7 +1,8 @@
 "use client";
 
-import Link from "next/link";
+import { useState } from "react";
 import { LogOut } from "lucide-react";
+import { signOut } from "aws-amplify/auth";
 
 import { NotificationBell } from "@/components/shared/notification-bell";
 
@@ -12,8 +13,17 @@ export function Navbar({
   title: string;
   subtitle: string;
 }) {
+  const [signingOut, setSigningOut] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function logout() {
+    setSigningOut(true); setError(null);
+    try {
+      if (process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID) await signOut();
+      window.location.assign("/api/auth/logout");
+    } catch { setError("Unable to sign out. Please retry."); setSigningOut(false); }
+  }
   return (
-    <header className="sticky top-0 z-20 flex items-center justify-between gap-4 border-b border-white/10 bg-[linear-gradient(180deg,rgba(8,14,25,0.94),rgba(8,14,25,0.82))] px-6 py-4 backdrop-blur-xl">
+    <header className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-4 border-b border-white/10 bg-[linear-gradient(180deg,rgba(8,14,25,0.94),rgba(8,14,25,0.82))] px-4 py-4 backdrop-blur-xl sm:px-6">
       <div>
         <div className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.24em] text-sky-200">
           Live operations
@@ -23,13 +33,16 @@ export function Navbar({
       </div>
       <div className="flex items-center gap-3">
         <NotificationBell />
-        <Link
+        <button
           className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-foreground transition hover:border-danger/30 hover:bg-danger/10"
-          href="/api/auth/logout"
+          onClick={() => void logout()}
+          disabled={signingOut}
+          type="button"
         >
           <LogOut className="h-4 w-4" />
-          Sign out
-        </Link>
+          {signingOut ? "Signing out…" : "Sign out"}
+        </button>
+        {error ? <p role="alert" className="text-xs text-red-300">{error}</p> : null}
       </div>
     </header>
   );

@@ -2,6 +2,7 @@ import { PortalShell } from "@/components/shared/portal-shell";
 
 const items = [
   { href: "/citizen/dashboard", label: "Dashboard" },
+  { href: "/citizen/hazards", label: "Hazard Reports" },
   { href: "/citizen/map", label: "Live Map" },
   { href: "/citizen/resources", label: "Resources" },
   { href: "/citizen/sos", label: "SOS" },

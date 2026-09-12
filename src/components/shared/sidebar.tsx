@@ -20,7 +20,7 @@ export function Sidebar({
   const pathname = usePathname();
 
   return (
-    <aside className="sticky top-0 flex h-screen w-72 flex-col border-r border-white/10 bg-[linear-gradient(180deg,rgba(10,18,33,0.98),rgba(5,10,20,0.96))] p-6 shadow-[24px_0_80px_rgba(2,6,23,0.35)] backdrop-blur-xl">
+    <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col overflow-y-auto border-r border-white/10 bg-[linear-gradient(180deg,rgba(10,18,33,0.98),rgba(5,10,20,0.96))] p-5 shadow-[24px_0_80px_rgba(2,6,23,0.35)] backdrop-blur-xl lg:flex">
       <div>
         <div className="inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.28em] text-primary">
           CrisisConnect
@@ -55,7 +55,7 @@ export function Sidebar({
           <p className="text-sm font-medium text-foreground">Offline readiness</p>
         </div>
         <p className="mt-2 text-xs leading-5 text-muted">
-          Safe zones, alerts, and queued SOS payloads remain available even when connectivity drops.
+          Check the status of every emergency request. A saved draft is only sent after the server confirms it.
         </p>
       </div>
     </aside>

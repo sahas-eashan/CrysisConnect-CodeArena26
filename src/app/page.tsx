@@ -105,11 +105,11 @@ export default function HomePage() {
       <div className="mx-auto flex max-w-7xl flex-col gap-10">
         <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
           <div>
-            <Badge className="border-primary/40 bg-primary/10 text-primary">Disaster response platform</Badge>
+            <Badge className="border-primary/40 bg-primary/10 text-primary">CodeArena 26 · Disaster response</Badge>
             <h1 className="mt-4 max-w-4xl text-5xl font-bold tracking-tight text-white lg:text-6xl">
               CrisisConnect
               <span className="block bg-gradient-to-r from-sky-300 via-cyan-200 to-emerald-300 bg-clip-text text-transparent">
-                Disaster response with live AI command support
+                Report hazards. Verify evidence. Coordinate response.
               </span>
             </h1>
             <p className="mt-4 max-w-3xl text-lg leading-8 text-slate-300">
@@ -117,13 +117,13 @@ export default function HomePage() {
               safe-zone routing, resource allocation, and resilient community communication.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
-              <Link href="/citizen/dashboard">
+              <Link href="/citizen/hazards">
                 <Button>Citizen Portal</Button>
               </Link>
-              <Link href="/ngo/dashboard">
+              <Link href="/ngo/hazards">
                 <Button variant="success">NGO Portal</Button>
               </Link>
-              <Link href="/admin/dashboard">
+              <Link href="/admin/hazards">
                 <Button variant="secondary">Government Portal</Button>
               </Link>
             </div>
@@ -206,7 +206,7 @@ export default function HomePage() {
                 <li>Built on AWS with Terraform so every resource can be recreated or destroyed cleanly.</li>
                 <li>Uses PostGIS for disaster polygons, geofenced alerts, safe-zone capacity routing, and responder matching.</li>
                 <li>Supports citizens, volunteers, NGOs, and government teams in one shared workflow.</li>
-                <li>Includes offline-safe UX patterns for queued SOS submission and cached emergency data.</li>
+                <li>Tracks photo reports, evidence checks, officer decisions, crew clearance, and shelter allocations in one shared case history.</li>
               </ul>
             </div>
           </Card>

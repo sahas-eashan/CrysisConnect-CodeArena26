@@ -2,181 +2,100 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-
+import { generateClient } from "aws-amplify/api";
+import { HazardMap, hazardCircle } from "@/components/hazards/hazard-map";
+import { useHazards } from "@/components/hazards/use-hazards";
 import { MapView, markersFromPoints } from "@/components/map/map-view";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { useGeolocation } from "@/hooks/use-geolocation";
+import { configureAmplify } from "@/lib/aws/amplify";
+import { queries } from "@/lib/aws/graphql/operations";
+import type { Disaster, MapMarker, Resource, SafeZone } from "@/lib/types";
 import { parseGeoJsonPoint } from "@/lib/utils";
-import { mockDisasters, mockResources, mockSafeZones } from "@/lib/mock-data";
-import type { MapMarker } from "@/lib/types";
 
-function isPointInsidePolygon(
-  point: { longitude: number; latitude: number } | null,
-  polygon: { type: string; coordinates: number[][][] }
-) {
-  if (!point || polygon.type !== "Polygon" || !polygon.coordinates.length) return false;
+function validPoint(value?: string | null) {
+  const point = parseGeoJsonPoint(value);
+  return point && Number.isFinite(point.latitude) && Number.isFinite(point.longitude) && Math.abs(point.latitude) <= 85 && Math.abs(point.longitude) <= 180 ? point : null;
+}
 
-  const ring = polygon.coordinates[0];
-  let inside = false;
-
-  for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index++) {
-    const [currentLongitude, currentLatitude] = ring[index];
-    const [previousLongitude, previousLatitude] = ring[previous];
-
-    const intersects =
-      currentLatitude > point.latitude !== previousLatitude > point.latitude &&
-      point.longitude <
-        ((previousLongitude - currentLongitude) * (point.latitude - currentLatitude)) /
-          (previousLatitude - currentLatitude) +
-          currentLongitude;
-
-    if (intersects) inside = !inside;
+function polygonFor(disaster: Disaster): string | null {
+  if (disaster.affectedArea) {
+    try {
+      const parsed = JSON.parse(disaster.affectedArea);
+      const geometry = parsed.type === "Feature" ? parsed.geometry : parsed;
+      if (["Polygon", "MultiPolygon"].includes(geometry?.type) && Array.isArray(geometry.coordinates)) return JSON.stringify(geometry);
+    } catch { /* Fall through to the actual configured radius. */ }
   }
-
-  return inside;
+  const point = validPoint(disaster.centerPoint);
+  return point && disaster.radiusKm && disaster.radiusKm > 0 ? hazardCircle(point, disaster.radiusKm * 1000) : null;
 }
 
 function CitizenMapContent() {
-  const searchParams = useSearchParams();
-  const selectedSafeZoneId = searchParams.get("safeZone");
-  const [userLocation, setUserLocation] = useState<{ longitude: number; latitude: number } | null>(null);
+  const selectedId = useSearchParams().get("safeZone");
+  const hasAws = Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL);
+  const [disasters, setDisasters] = useState<Disaster[]>([]);
+  const [shelters, setShelters] = useState<SafeZone[]>([]);
+  const [resources, setResources] = useState<Resource[]>([]);
+  const [awsError, setAwsError] = useState<string | null>(null);
+  const [awsLoading, setAwsLoading] = useState(hasAws);
+  const { coordinates, error: gpsError, loading: locating, requestLocation } = useGeolocation();
+  const hazards = useHazards("citizen", coordinates);
 
   useEffect(() => {
-    if (!navigator.geolocation) return;
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setUserLocation({
-          longitude: position.coords.longitude,
-          latitude: position.coords.latitude
-        });
-      },
-      () => {
-        setUserLocation(null);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000
+    if (!hasAws) return;
+    let active = true;
+    let pending = false;
+    configureAmplify(); const client = generateClient();
+    async function refresh() {
+      if (pending) return;
+      pending = true;
+      const results = await Promise.allSettled([
+        client.graphql({ query: queries.getDisasters, authMode: "userPool" }),
+        client.graphql({ query: queries.getSafeZones, authMode: "userPool" }),
+        client.graphql({ query: queries.getResources, authMode: "userPool" })
+      ]);
+      if (active) {
+        const errors: string[] = [];
+        if (results[0].status === "fulfilled") setDisasters((results[0].value as { data?: { getDisasters?: Disaster[] } }).data?.getDisasters ?? []); else errors.push("disasters");
+        if (results[1].status === "fulfilled") setShelters((results[1].value as { data?: { getSafeZones?: SafeZone[] } }).data?.getSafeZones ?? []); else errors.push("shelters");
+        if (results[2].status === "fulfilled") setResources((results[2].value as { data?: { getResources?: Resource[] } }).data?.getResources ?? []); else errors.push("resources");
+        setAwsError(errors.length ? `Unable to refresh ${errors.join(", ")}. Any existing markers show the last successful update; retrying shortly.` : null);
+        setAwsLoading(false);
       }
-    );
-  }, []);
+      pending = false;
+    }
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 10000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [hasAws]);
 
-  const selectedSafeZone = useMemo(
-    () => mockSafeZones.find((zone) => zone.id === selectedSafeZoneId) ?? mockSafeZones[0],
-    [selectedSafeZoneId]
-  );
-  const selectedSafeZonePoint = parseGeoJsonPoint(selectedSafeZone?.location);
-  const disasterCenterPoint = parseGeoJsonPoint(mockDisasters[0]?.centerPoint);
-  const disasterPolygon = {
-    type: "Polygon",
-    coordinates: [[[79.851, 6.915], [79.891, 6.915], [79.891, 6.949], [79.851, 6.949], [79.851, 6.915]]]
-  };
-  const disasterInfoPoint = useMemo(() => {
-    const ring = disasterPolygon.coordinates[0];
-    const longitudes = ring.map(([longitude]) => longitude);
-    const latitudes = ring.map(([, latitude]) => latitude);
+  const activeDisasters = useMemo(() => disasters.filter((disaster) => !["resolved", "closed", "inactive"].includes(disaster.status?.toLowerCase())), [disasters]);
+  const openShelters = useMemo(() => shelters.filter((shelter) => !["closed", "inactive"].includes(shelter.status?.toLowerCase() ?? "")), [shelters]);
+  const selectedShelter = selectedId ? openShelters.find((shelter) => shelter.id === selectedId) : undefined;
+  const selectedHazardShelter = selectedId ? hazards.snapshot?.shelters.find((shelter) => shelter.id === selectedId) : undefined;
+  const selectedPoint = validPoint(selectedShelter?.location) ?? selectedHazardShelter?.location;
+  const disasterPoint = validPoint(activeDisasters[0]?.centerPoint);
+  const center: [number, number] | undefined = selectedPoint ? [selectedPoint.longitude, selectedPoint.latitude] : coordinates ? [coordinates.longitude, coordinates.latitude] : disasterPoint ? [disasterPoint.longitude, disasterPoint.latitude] : undefined;
+  const markers = useMemo<MapMarker[]>(() => [
+    ...markersFromPoints(openShelters.filter((shelter) => validPoint(shelter.location)).map((shelter) => ({ id: shelter.id, name: `${shelter.name} (${Math.max(0, shelter.capacity - shelter.currentOccupancy)} places available)`, location: shelter.location, color: "#22c55e" }))),
+    ...markersFromPoints(resources.filter((resource) => validPoint(resource.location) && !["depleted", "unavailable"].includes(resource.status?.toLowerCase() ?? "")).map((resource) => ({ id: resource.id, name: resource.name, location: resource.location, color: "#f59e0b" }))),
+    ...markersFromPoints(activeDisasters.filter((disaster) => validPoint(disaster.centerPoint)).map((disaster) => ({ id: disaster.id, name: disaster.title, location: disaster.centerPoint, color: "#ef4444" })))
+  ], [openShelters, resources, activeDisasters]);
+  const polygons = activeDisasters.map(polygonFor).filter((polygon): polygon is string => Boolean(polygon));
 
-    return {
-      longitude: Math.max(...longitudes) - 0.0015,
-      latitude: Math.max(...latitudes) - 0.001
-    };
-  }, []);
-  const isUserAffected = useMemo(() => isPointInsidePolygon(userLocation, disasterPolygon), [userLocation]);
-
-  const markers: MapMarker[] = [
-    ...markersFromPoints(mockSafeZones.map((zone) => ({ id: zone.id, name: zone.name, location: zone.location, color: "#22c55e" }))),
-    ...markersFromPoints(mockResources.map((resource) => ({ id: resource.id, name: resource.name, location: resource.location, color: "#f59e0b" }))),
-    ...(userLocation
-      ? [
-          {
-            id: "citizen-current-location",
-            label: "Your current location",
-            longitude: userLocation.longitude,
-            latitude: userLocation.latitude,
-            color: "#3b82f6",
-            popup: '<div style="color:#f8fafc;font-weight:600;font-size:14px;line-height:1.3;">Your current location</div>'
-          } satisfies MapMarker
-        ]
-      : []),
-    ...(disasterInfoPoint
-      ? [
-          {
-            id: `${mockDisasters[0].id}-info`,
-            label: `${mockDisasters[0].title}`,
-            longitude: disasterInfoPoint.longitude,
-            latitude: disasterInfoPoint.latitude,
-            popup: `<div style="color:#f8fafc;font-weight:600;font-size:14px;line-height:1.3;">${mockDisasters[0].title}</div>`,
-            variant: "info"
-          } satisfies MapMarker
-        ]
-      : [])
-  ];
-
-  return (
-    <div className="space-y-6">
-      <Card>
-        <CardTitle>Live disaster map</CardTitle>
-        <CardDescription className="mt-2">
-          Red zones show affected areas, green markers show safe zones, and amber markers show resource depots.
-        </CardDescription>
-        <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,36rem)_18rem] lg:items-start lg:justify-center">
-          <MapView
-            className="mx-auto max-w-[36rem] lg:mx-0"
-            center={
-              selectedSafeZonePoint ? [selectedSafeZonePoint.longitude, selectedSafeZonePoint.latitude] : undefined
-            }
-            markers={markers}
-            polygons={[JSON.stringify(disasterPolygon)]}
-          />
-          <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
-            <p className="text-sm font-semibold text-white">Map legend</p>
-            <div className="mt-4 space-y-3 text-sm text-slate-300">
-              <div className="flex items-center gap-3">
-                <span className="h-3 w-3 rounded-full bg-amber-500" />
-                <span>Resources</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="h-3 w-3 rounded-full bg-green-500" />
-                <span>Shelters</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="h-3 w-3 rounded-full bg-blue-500" />
-                <span>You</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="h-3 w-3 rounded-sm bg-red-500/80" />
-                <span>Disaster zone</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      <div className={`grid gap-4 ${isUserAffected ? "md:grid-cols-2" : "md:grid-cols-1"}`}>
-        <Card>
-          <CardTitle>Disaster impact</CardTitle>
-          <CardDescription className="mt-2">
-            {userLocation
-              ? isUserAffected
-                ? `You are currently inside the ${mockDisasters[0].title} disaster zone.`
-                : `You are currently outside the ${mockDisasters[0].title} disaster zone.`
-              : "Allow location access to check whether you are inside the disaster zone."}
-          </CardDescription>
-        </Card>
-        {isUserAffected ? (
-          <Card>
-            <CardTitle>Recommended shelter</CardTitle>
-            <CardDescription className="mt-2">{selectedSafeZone?.name}</CardDescription>
-          </Card>
-        ) : null}
-      </div>
-    </div>
-  );
+  return <div className="space-y-6">
+    <Card><CardTitle>Live disaster map</CardTitle><CardDescription className="mt-2">Disasters, shelters and resource depots refresh from the configured services every 10 seconds.</CardDescription>
+      {!hasAws ? <p className="mt-3 text-sm text-amber-300">AWS disaster and resource services are not configured. The map displays the shared hazard workflow data available on this server.</p> : null}
+      {awsLoading || hazards.loading ? <p className="mt-3 text-sm text-muted" role="status">Loading map data…</p> : null}
+      {awsError ? <p className="mt-3 text-sm text-red-300" role="alert">{awsError}</p> : null}
+      {hazards.error ? <p className="mt-3 text-sm text-red-300" role="alert">{hazards.error}</p> : null}
+      {selectedId && !awsLoading && !hazards.loading && !selectedShelter && !selectedHazardShelter ? <p className="mt-3 text-sm text-amber-300">The requested shelter is unavailable or no longer listed. Select an available shelter before planning travel.</p> : null}
+      {selectedShelter || selectedHazardShelter ? <p className="mt-3 text-sm text-sky-200">Selected shelter: {selectedShelter?.name ?? selectedHazardShelter?.name}</p> : null}
+    </Card>
+    {hazards.snapshot ? <HazardMap snapshot={hazards.snapshot} point={coordinates} extraMarkers={markers} extraPolygons={polygons} center={center} onLocate={requestLocation} locating={locating} locationError={gpsError} /> : <Card><MapView center={center} markers={markers} polygons={polygons} /><p className="mt-3 text-sm text-muted">Route screening is unavailable until the hazard service responds.</p></Card>}
+  </div>;
 }
 
 export default function CitizenMapPage() {
-  return (
-    <Suspense fallback={<div className="space-y-6"><Card><CardTitle>Live disaster map</CardTitle><CardDescription className="mt-2">Loading map context...</CardDescription></Card></div>}>
-      <CitizenMapContent />
-    </Suspense>
-  );
+  return <Suspense fallback={<Card><CardTitle>Live disaster map</CardTitle><CardDescription className="mt-2">Loading map context…</CardDescription></Card>}><CitizenMapContent /></Suspense>;
 }
