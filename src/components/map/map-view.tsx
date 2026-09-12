@@ -1,0 +1,151 @@
+"use client";
+
+import { useEffect, useMemo, useRef } from "react";
+import maplibregl, { GeoJSONSource, LngLatLike, Map } from "maplibre-gl";
+
+import "maplibre-gl/dist/maplibre-gl.css";
+
+import type { MapMarker } from "@/lib/types";
+import { parseGeoJsonPoint } from "@/lib/utils";
+
+type MapViewProps = {
+  center?: LngLatLike;
+  zoom?: number;
+  markers?: MapMarker[];
+  polygons?: string[];
+  className?: string;
+};
+
+export function MapView({
+  center = [79.8612, 6.9271],
+  zoom = 11,
+  markers = [],
+  polygons = [],
+  className = ""
+}: MapViewProps) {
+  const mapRef = useRef<HTMLDivElement | null>(null);
+  const instanceRef = useRef<Map | null>(null);
+
+  const normalizedPolygons = useMemo(
+    () =>
+      polygons
+        .map((polygon) => {
+          try {
+            return JSON.parse(polygon);
+          } catch {
+            return null;
+          }
+        })
+        .filter(Boolean) as Record<string, unknown>[],
+    [polygons]
+  );
+
+  useEffect(() => {
+    if (!mapRef.current || instanceRef.current) return;
+
+    const map = new maplibregl.Map({
+      container: mapRef.current,
+      style: "https://demotiles.maplibre.org/style.json",
+      center,
+      zoom
+    });
+
+    map.addControl(new maplibregl.NavigationControl(), "top-right");
+    instanceRef.current = map;
+
+    return () => {
+      instanceRef.current?.remove();
+      instanceRef.current = null;
+    };
+  }, [center, zoom]);
+
+  useEffect(() => {
+    const map = instanceRef.current;
+    if (!map) return;
+
+    const markerInstances: maplibregl.Marker[] = [];
+    markers.forEach((marker) => {
+      const popup = marker.popup ? new maplibregl.Popup({ offset: 8 }).setHTML(marker.popup) : undefined;
+      const markerInstance = new maplibregl.Marker({ color: marker.color ?? "#38bdf8" }).setLngLat([
+        marker.longitude,
+        marker.latitude
+      ]);
+      if (popup) markerInstance.setPopup(popup);
+      markerInstance.addTo(map);
+      markerInstances.push(markerInstance);
+    });
+
+    return () => {
+      markerInstances.forEach((marker) => marker.remove());
+    };
+  }, [markers]);
+
+  useEffect(() => {
+    const map = instanceRef.current;
+    if (!map) return;
+
+    const sourceId = "incident-polygons";
+    const featureCollection = {
+      type: "FeatureCollection",
+      features: normalizedPolygons.map((geometry, index) => ({
+        type: "Feature",
+        id: index,
+        properties: {},
+        geometry
+      }))
+    };
+
+    const upsert = () => {
+      const existing = map.getSource(sourceId) as GeoJSONSource | undefined;
+      if (existing) {
+        existing.setData(featureCollection as never);
+        return;
+      }
+
+      map.addSource(sourceId, {
+        type: "geojson",
+        data: featureCollection as never
+      });
+      map.addLayer({
+        id: "incident-polygons-fill",
+        type: "fill",
+        source: sourceId,
+        paint: {
+          "fill-color": "#ef4444",
+          "fill-opacity": 0.2
+        }
+      });
+      map.addLayer({
+        id: "incident-polygons-outline",
+        type: "line",
+        source: sourceId,
+        paint: {
+          "line-color": "#ef4444",
+          "line-width": 2
+        }
+      });
+    };
+
+    if (map.isStyleLoaded()) upsert();
+    else map.once("load", upsert);
+  }, [normalizedPolygons]);
+
+  return <div className={`h-[420px] w-full overflow-hidden rounded-2xl border border-slate-800 ${className}`} ref={mapRef} />;
+}
+
+export function markersFromPoints(points: { id: string; name: string; location?: string | null; color?: string }[]) {
+  return points
+    .map((point) => {
+      const parsed = parseGeoJsonPoint(point.location);
+      if (!parsed) return null;
+      return {
+        id: point.id,
+        label: point.name,
+        longitude: parsed.longitude,
+        latitude: parsed.latitude,
+        color: point.color,
+        popup: `<strong>${point.name}</strong>`
+      } satisfies MapMarker;
+    })
+    .filter(Boolean) as MapMarker[];
+}

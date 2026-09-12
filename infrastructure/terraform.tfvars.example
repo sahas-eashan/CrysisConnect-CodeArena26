@@ -1,0 +1,5 @@
+aws_region         = "ap-south-1"
+app_url            = "http://localhost:3000"
+db_password        = "ReplaceWithStrongPassword123!"
+ses_sender_email   = "alerts@example.com"
+allowed_cidr_blocks = ["0.0.0.0/0"]
