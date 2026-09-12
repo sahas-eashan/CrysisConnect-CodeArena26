@@ -1,31 +1,46 @@
 # CrisisConnect Citizen Android App
 
-Android-only Flutter implementation of the citizen-facing mobile experience for CrisisConnect.
+Android-only Flutter client for the citizen experience of CrisisConnect. The app now authenticates directly against Cognito and uses the provisioned AppSync GraphQL API for:
 
-## Included
+- citizen sign in / sign up / confirmation
+- live dashboard, map, resources, and news reads
+- real resource requests and SOS creation
+- citizen-safe realtime updates for news, request status, and SOS status
 
-- Flutter app under `lib/main.dart`
-- Android target only under `android/`
-- Stitch references downloaded into `assets/stitch/`
+## Project Structure
 
-## Stitch References
+- `lib/main.dart`: minimal Android entrypoint
+- `lib/app/`: top-level app shell and theme setup
+- `lib/core/backend.dart`: mobile config, Amplify bootstrap, GraphQL documents, models, repository, GeoJSON helpers
+- `lib/features/auth/`: Cognito auth gate and forms
+- `lib/features/citizen/`: dashboard, map, SOS, and resources screens
+- `assets/stitch/`: visual reference files pulled from Stitch
 
-- `disaster_dashboard.html`
-- `disaster_dashboard.png`
-- `live_safety_map.html`
-- `live_safety_map.png`
-- `sos_emergency.html`
-- `sos_emergency.png`
-- `resource_browser.html`
-- `resource_browser.png`
-- `design_system.md`
-- `project_manifest.json`
+## Required Mobile Config
+
+Pass the deployed AWS outputs as Dart defines. The app intentionally does not hardcode backend IDs.
+
+```bash
+flutter run \
+  --dart-define=CRISIS_AWS_REGION=ap-south-1 \
+  --dart-define=CRISIS_COGNITO_USER_POOL_ID=ap-south-1_example \
+  --dart-define=CRISIS_COGNITO_USER_POOL_CLIENT_ID=exampleclientid \
+  --dart-define=CRISIS_APPSYNC_GRAPHQL_URL=https://example.appsync-api.ap-south-1.amazonaws.com/graphql
+```
+
+Optional:
+
+```bash
+--dart-define=CRISIS_APPSYNC_API_NAME=data
+```
+
+You can also use `--dart-define-from-file=dart_defines.example.json` after copying and filling the sample file.
 
 ## Run
 
 ```bash
 flutter pub get
-flutter run
+flutter run --dart-define-from-file=dart_defines.example.json
 ```
 
 ## Verify
@@ -33,20 +48,11 @@ flutter run
 ```bash
 flutter analyze
 flutter test
+flutter build apk --debug
 ```
-# crisisconnect_citizen
 
-A new Flutter project.
+## Notes
 
-## Getting Started
-
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+- The map uses OpenStreetMap tiles plus live GeoJSON returned by the backend (`affectedArea`, `location`, `boundary`, `centerPoint`).
+- Citizens now query `getMyResourceRequests` and `getMySOSSignals`, not the NGO/government-only admin queries.
+- Android location permission is requested only when the app needs current position for safety routing, SOS, or request location capture.

@@ -27,6 +27,10 @@ const pool = new Pool({
 
 const lambdaClient = new LambdaClient({});
 
+type DbClient = {
+  query: (text: string, values?: any[]) => Promise<{ rows: Record<string, any>[] }>;
+};
+
 function getGroups(event: AppSyncEvent) {
   const rawGroups = event.identity?.claims?.["cognito:groups"];
   if (Array.isArray(rawGroups)) return rawGroups as string[];
@@ -38,6 +42,60 @@ function requireGroup(event: AppSyncEvent, allowed: string[]) {
   const groups = getGroups(event);
   if (allowed.some((group) => groups.includes(group))) return;
   throw new Error("Unauthorized");
+}
+
+function getProfileRole(event: AppSyncEvent) {
+  const groups = getGroups(event);
+  if (groups.includes("government")) return "government";
+  if (groups.includes("ngo")) return "ngo_org_member";
+  if (groups.includes("ngo_org_member")) return "ngo_org_member";
+  if (groups.includes("ngo_individual")) return "ngo_individual";
+
+  const roleClaim = event.identity?.claims?.["custom:role"];
+  if (
+    roleClaim === "government" ||
+    roleClaim === "ngo" ||
+    roleClaim === "ngo_org_member" ||
+    roleClaim === "ngo_individual" ||
+    roleClaim === "citizen"
+  ) {
+    return roleClaim === "ngo" ? "ngo_org_member" : roleClaim;
+  }
+
+  return "citizen";
+}
+
+function getProfileName(event: AppSyncEvent, userId: string) {
+  const claims = event.identity?.claims ?? {};
+  const candidates = [claims.name, claims.email, claims.phone_number]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .map((value) => value.trim());
+
+  return candidates[0] ?? `Citizen ${userId.slice(0, 8)}`;
+}
+
+async function ensureProfile(client: DbClient, event: AppSyncEvent, userId: string) {
+  await client.query(
+    `INSERT INTO profiles (id, role, full_name, phone, email, is_available)
+     VALUES ($1, $2::user_role, $3, $4, $5, true)
+     ON CONFLICT (id) DO UPDATE
+     SET role = CASE
+           WHEN profiles.role = 'citizen'::user_role AND EXCLUDED.role <> 'citizen'::user_role THEN EXCLUDED.role
+           ELSE profiles.role
+         END,
+         full_name = COALESCE(NULLIF(profiles.full_name, ''), EXCLUDED.full_name),
+         phone = COALESCE(profiles.phone, EXCLUDED.phone),
+         email = COALESCE(profiles.email, EXCLUDED.email)`,
+    [
+      userId,
+      getProfileRole(event),
+      getProfileName(event, userId),
+      typeof event.identity?.claims?.phone_number === "string"
+        ? event.identity.claims.phone_number
+        : null,
+      typeof event.identity?.claims?.email === "string" ? event.identity.claims.email : null
+    ]
+  );
 }
 
 function geoJsonSql(value: string | null | undefined) {
@@ -175,12 +233,16 @@ export async function handler(event: AppSyncEvent) {
   const userId = event.identity?.sub ?? "system";
   const args = event.arguments ?? {};
 
+  if (event.info.parentTypeName === "Mutation" && userId !== "system") {
+    await ensureProfile(pool, event, userId);
+  }
+
   switch (event.info.fieldName) {
     case "getDisasters": {
       const { rows } = await pool.query(
         `SELECT *, ST_AsGeoJSON(affected_area) AS affected_area, ST_AsGeoJSON(center_point) AS center_point
          FROM disasters
-         WHERE ($1::text IS NULL OR status = $1)
+         WHERE ($1::text IS NULL OR status::text = $1)
          ORDER BY created_at DESC`,
         [args.status ?? null]
       );
@@ -237,16 +299,72 @@ export async function handler(event: AppSyncEvent) {
       );
       return rows.map(mapRequest);
     }
+    case "getMyResourceRequests": {
+      const { rows } = await pool.query(
+        `SELECT *, ST_AsGeoJSON(location) AS location
+         FROM resource_requests
+         WHERE requested_by = $1
+           AND ($2::text IS NULL OR status = $2)
+         ORDER BY created_at DESC`,
+        [userId, args.status ?? null]
+      );
+      return rows.map(mapRequest);
+    }
     case "getSOSSignals": {
       requireGroup(event, ["ngo", "government"]);
       const { rows } = await pool.query(
         `SELECT *, ST_AsGeoJSON(location) AS location
          FROM sos_signals
-         WHERE ($1::text IS NULL OR status = $1)
+         WHERE ($1::text IS NULL OR status::text = $1)
          ORDER BY created_at DESC`,
         [args.status ?? null]
       );
       return rows.map(mapSOS);
+    }
+    case "getMySOSSignals": {
+      const client = await pool.connect();
+      try {
+        const { rows } = await client.query(
+          `SELECT *, ST_AsGeoJSON(location) AS location
+           FROM sos_signals
+           WHERE sender_id = $1
+             AND ($2::text IS NULL OR status::text = $2)
+           ORDER BY created_at DESC`,
+          [userId, args.status ?? null]
+        );
+
+        const signals = await Promise.all(
+          rows.map(async (row) => {
+            if (!row.location) {
+              return {
+                ...mapSOS(row),
+                nearestResponders: []
+              };
+            }
+
+            const responders = await client.query(
+              `SELECT id, role, full_name, phone, email, is_available,
+                      ST_Distance(location, ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)::geography) AS distance
+               FROM profiles
+               WHERE role IN ('ngo_individual', 'ngo_org_member')
+                 AND is_available = true
+                 AND location IS NOT NULL
+               ORDER BY distance ASC
+               LIMIT 3`,
+              [row.location]
+            );
+
+            return {
+              ...mapSOS(row),
+              nearestResponders: responders.rows.map(mapProfile)
+            };
+          })
+        );
+
+        return signals;
+      } finally {
+        client.release();
+      }
     }
     case "getNewsUpdates": {
       const { rows } = await pool.query(
@@ -386,6 +504,7 @@ export async function handler(event: AppSyncEvent) {
     }
     case "fulfillResourceRequest": {
       requireGroup(event, ["ngo", "government"]);
+      await ensureProfile(pool, event, userId);
       const { rows } = await pool.query(
         `UPDATE resource_requests
          SET status = 'fulfilled', fulfilled_by = $2
@@ -406,15 +525,20 @@ export async function handler(event: AppSyncEvent) {
            RETURNING *, ST_AsGeoJSON(location) AS location`,
           [userId, input.type, input.description ?? null, input.disasterId ?? null]
         );
-        const responders = await client.query(
-          `SELECT id, role, full_name, phone, email, is_available,
-                  ST_Distance(location, ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)::geography) AS distance
-           FROM profiles
-           WHERE role IN ('ngo_individual', 'ngo_org_member') AND is_available = true
-           ORDER BY distance ASC
-           LIMIT 3`,
-          [input.location]
-        );
+        const responders =
+          input.location == null
+            ? { rows: [] as Record<string, any>[] }
+            : await client.query(
+                `SELECT id, role, full_name, phone, email, is_available,
+                        ST_Distance(location, ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)::geography) AS distance
+                 FROM profiles
+                 WHERE role IN ('ngo_individual', 'ngo_org_member')
+                   AND is_available = true
+                   AND location IS NOT NULL
+                 ORDER BY distance ASC
+                 LIMIT 3`,
+                [input.location]
+              );
         await client.query("COMMIT");
 
         await triggerWorker({

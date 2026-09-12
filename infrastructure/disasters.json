@@ -1,0 +1,1 @@
+{"errorType":"error","errorMessage":"operator does not exist: disaster_status = text","trace":["error: operator does not exist: disaster_status = text","    at /var/task/node_modules/pg-pool/index.js:45:11","    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)","    at async Runtime.handler (file:///var/task/dist/index.js:153:30)"]}

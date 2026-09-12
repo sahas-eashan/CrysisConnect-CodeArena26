@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.compile.JavaCompile
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -6,7 +8,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.crisisconnect_citizen"
+    namespace = "com.crisisconnect.citizen"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -21,7 +23,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.crisisconnect_citizen"
+        applicationId = "com.crisisconnect.citizen"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -41,4 +43,17 @@ android {
 
 flutter {
     source = "../.."
+}
+
+// amplify_db_common is Kotlin-only; ensure its classes exist before javac compiles
+// GeneratedPluginRegistrant.java (avoids intermittent "cannot find symbol AmplifyDbCommonPlugin").
+afterEvaluate {
+    tasks.withType<JavaCompile>().configureEach {
+        val match = Regex("^compile(.+)JavaWithJavac$").find(name) ?: return@configureEach
+        val variant = match.groupValues[1]
+        val kotlinCompile = rootProject.tasks.findByPath(":amplify_db_common:compile${variant}Kotlin")
+        if (kotlinCompile != null) {
+            dependsOn(kotlinCompile)
+        }
+    }
 }

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  confirmSignIn,
   confirmSignUp,
   getCurrentUser,
   signIn,
@@ -17,6 +18,23 @@ type AuthState = {
   groups: string[];
   isReady: boolean;
 };
+
+export type LoginResult =
+  | { status: "signedIn" }
+  | { status: "newPasswordRequired" };
+
+function describeSignInStep(signInStep: string) {
+  switch (signInStep) {
+    case "CONFIRM_SIGN_UP":
+      return "Account confirmation is still required before you can sign in.";
+    case "RESET_PASSWORD":
+      return "Cognito requires a password reset for this account before sign-in can complete.";
+    case "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED":
+      return "A new password is required to complete the first sign-in for this account.";
+    default:
+      return `Cognito returned an unsupported sign-in step: ${signInStep}.`;
+  }
+}
 
 export function useAuth() {
   const [state, setState] = useState<AuthState>({
@@ -57,8 +75,29 @@ export function useAuth() {
       ...state,
       async login(username: string, password: string) {
         configureAmplify();
-        await signIn({ username, password });
+        const result = await signIn({ username, password });
+
+        if (result.isSignedIn || result.nextStep.signInStep === "DONE") {
+          await refresh();
+          return { status: "signedIn" } as const;
+        }
+
+        if (result.nextStep.signInStep === "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED") {
+          return { status: "newPasswordRequired" } as const;
+        }
+
+        throw new Error(describeSignInStep(result.nextStep.signInStep));
+      },
+      async completeNewPassword(newPassword: string) {
+        configureAmplify();
+        const result = await confirmSignIn({ challengeResponse: newPassword });
+
+        if (!result.isSignedIn && result.nextStep.signInStep !== "DONE") {
+          throw new Error(describeSignInStep(result.nextStep.signInStep));
+        }
+
         await refresh();
+        return { status: "signedIn" } as const;
       },
       async register(username: string, password: string, email: string) {
         configureAmplify();

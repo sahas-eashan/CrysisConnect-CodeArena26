@@ -35,3 +35,17 @@ a {
 * {
   box-sizing: border-box;
 }
+
+.cc-map-popup .maplibregl-popup-content {
+  background: #020817;
+  color: #f8fafc;
+  border: 1px solid #334155;
+  border-radius: 0.875rem;
+  box-shadow: 0 12px 30px rgba(2, 8, 23, 0.35);
+  padding: 0.6rem 0.8rem;
+}
+
+.cc-map-popup .maplibregl-popup-tip {
+  border-top-color: #020817;
+  border-bottom-color: #020817;
+}

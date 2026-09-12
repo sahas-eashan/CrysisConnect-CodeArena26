@@ -117,4 +117,5 @@ export type MapMarker = {
   color?: string;
   label: string;
   popup?: string;
+  variant?: "pin" | "label" | "info";
 };

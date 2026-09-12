@@ -1,4 +1,4 @@
-package com.example.crisisconnect_citizen
+package com.crisisconnect.citizen
 
 import io.flutter.embedding.android.FlutterActivity
 

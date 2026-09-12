@@ -1,4 +1,4 @@
-"use client";
+export { default } from "./page.live"; /*
 
 import { FormEvent, useState } from "react";
 
@@ -71,3 +71,4 @@ export default function CitizenResourcesPage() {
     </div>
   );
 }
+*/
