@@ -259,6 +259,18 @@ export const mutations = {
       }
     }
   `,
+  updateSafeZoneOccupancy: /* GraphQL */ `
+    mutation UpdateSafeZoneOccupancy($id: ID!, $delta: Int!) {
+      updateSafeZoneOccupancy(id: $id, delta: $delta) {
+        id
+        name
+        capacity
+        currentOccupancy
+        location
+        status
+      }
+    }
+  `,
   createResource: /* GraphQL */ `
     mutation CreateResource($input: ResourceInput!) {
       createResource(input: $input) {
@@ -324,6 +336,16 @@ export const mutations = {
         id
         status
         assignedTo
+      }
+    }
+  `,
+  resolveSOS: /* GraphQL */ `
+    mutation ResolveSOS($id: ID!) {
+      resolveSOS(id: $id) {
+        id
+        status
+        assignedTo
+        resolvedAt
       }
     }
   `,
