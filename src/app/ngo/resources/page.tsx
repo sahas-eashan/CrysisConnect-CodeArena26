@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { useGeolocation } from "@/hooks/use-geolocation";
 import { configureAmplify } from "@/lib/aws/amplify";
 import { mutations, queries, subscriptions } from "@/lib/aws/graphql/operations";
-import type { Resource, ResourceRequest } from "@/lib/types";
+import type { Resource } from "@/lib/types";
 import { cn, toTitleCase } from "@/lib/utils";
 
 type ResourceFormState = {
@@ -66,20 +66,13 @@ function normalizeLocationInput(value: string) {
 export default function NgoResourcesPage() {
   const hasAwsConfig = Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL);
   const [resources, setResources] = useState<Resource[]>([]);
-  const [requests, setRequests] = useState<ResourceRequest[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL));
   const [savingResource, setSavingResource] = useState(false);
   const [form, setForm] = useState<ResourceFormState>(defaultForm);
   const { coordinates, error: locationError, loading: locationLoading, requestLocation } = useGeolocation();
-  const pendingRequests: Array<{
-    id: string;
-    quantityNeeded?: number | null;
-    resourceName?: string | null;
-    urgency?: string | null;
-  }> = [];
-  const fulfillingId: string | null = null;
+
   const resourceOptions = Array.from(
     new Map(
       resources
@@ -87,6 +80,7 @@ export default function NgoResourcesPage() {
         .map((resource) => [resource.name.trim().toLowerCase(), resource])
     ).values()
   ).sort((left, right) => left.name.localeCompare(right.name));
+
   const selectedExistingResource =
     form.name && form.name !== "__other__"
       ? resourceOptions.find((resource) => resource.name === form.name) ?? null
@@ -151,40 +145,6 @@ export default function NgoResourcesPage() {
     }));
   }, [coordinates]);
 
-  const pendingRequests = useMemo(
-    () => requests.filter((request) => (request.status ?? "pending").toLowerCase() !== "fulfilled"),
-    [requests]
-  );
-
-  async function onFulfill(id: string) {
-    if (!hasAwsConfig) {
-      setError("Live backend is not configured.");
-      return;
-    }
-
-    configureAmplify();
-    const client = generateClient();
-
-    try {
-      setFulfillingId(id);
-      setError(null);
-      const result = await client.graphql({
-        query: mutations.fulfillResourceRequest,
-        variables: { id }
-      });
-
-      const updatedRequest = (result as any).data?.fulfillResourceRequest as ResourceRequest | undefined;
-      if (updatedRequest) {
-        setRequests((current) => sortRequests(current.map((request) => (request.id === id ? updatedRequest : request))));
-      }
-      setMessage("Request marked as fulfilled.");
-    } catch (fulfillError) {
-      setError(fulfillError instanceof Error ? fulfillError.message : "Unable to fulfill the request.");
-    } finally {
-      setFulfillingId(null);
-    }
-  }
-
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -230,183 +190,157 @@ export default function NgoResourcesPage() {
     }
   }
 
-  async function onFulfill(_id: string) {}
-
   return (
     <div className="space-y-6">
-      <NgoResourceAiAssist requestId={pendingRequests[0]?.id} />
+      <NgoResourceAiAssist />
 
       <div className="grid gap-6 xl:grid-cols-[1fr_0.95fr]">
         <Card>
-        <CardTitle>Manage field inventory</CardTitle>
-        <CardDescription className="mt-2">
-          Publish stock levels so citizens and government teams share the same operating picture.
-        </CardDescription>
+          <CardTitle>Manage field inventory</CardTitle>
+          <CardDescription className="mt-2">
+            Publish stock levels so citizens and government teams share the same operating picture.
+          </CardDescription>
 
-        {error ? (
-          <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-            {error}
-          </div>
-        ) : null}
-
-        <div className="mt-6 space-y-3">
-          {resources.map((resource) => (
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4" key={resource.id}>
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="font-medium text-white">{resource.name}</p>
-                  <p className="mt-1 text-sm text-muted">
-                    {resource.quantity ?? 0} {resource.unit ?? "units"} • {resource.category ?? "uncategorized"}
-                  </p>
-                </div>
-                <span
-                  className={cn(
-                    "rounded-full px-3 py-1 text-xs font-medium",
-                    resource.status === "available" && "bg-emerald-500/15 text-emerald-300",
-                    resource.status === "low" && "bg-amber-500/15 text-amber-200",
-                    resource.status === "depleted" && "bg-red-500/15 text-red-200",
-                    !resource.status && "bg-slate-900 text-slate-300"
-                  )}
-                >
-                  {resource.status ? toTitleCase(resource.status) : "Unknown"}
-                </span>
-              </div>
-            </div>
-          ))}
-          {!resources.length && !loading ? (
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-muted">
-              No live resource inventory is available yet.
+          {error ? (
+            <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+              {error}
             </div>
           ) : null}
-        </div>
 
-        <div className="hidden">
-          <p className="text-sm font-medium text-white">Incoming citizen requests</p>
-          <div className="mt-3 space-y-3">
-            {pendingRequests.map((request) => (
-              <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4" key={request.id}>
-                <p className="font-medium text-white">{request.resourceName ?? "Unnamed request"}</p>
-                <p className="mt-1 text-sm text-muted">
-                  Needs {request.quantityNeeded ?? 0} • {(request.urgency ?? "normal").toLowerCase()} priority
-                </p>
-                <div className="mt-3">
-                  <Button disabled={fulfillingId === request.id} onClick={() => void onFulfill(request.id)}>
-                    {fulfillingId === request.id ? "Saving..." : "Mark as fulfilled"}
-                  </Button>
+          <div className="mt-6 space-y-3">
+            {resources.map((resource) => (
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4" key={resource.id}>
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="font-medium text-white">{resource.name}</p>
+                    <p className="mt-1 text-sm text-muted">
+                      {resource.quantity ?? 0} {resource.unit ?? "units"} • {resource.category ?? "uncategorized"}
+                    </p>
+                  </div>
+                  <span
+                    className={cn(
+                      "rounded-full px-3 py-1 text-xs font-medium",
+                      resource.status === "available" && "bg-emerald-500/15 text-emerald-300",
+                      resource.status === "low" && "bg-amber-500/15 text-amber-200",
+                      resource.status === "depleted" && "bg-red-500/15 text-red-200",
+                      !resource.status && "bg-slate-900 text-slate-300"
+                    )}
+                  >
+                    {resource.status ? toTitleCase(resource.status) : "Unknown"}
+                  </span>
                 </div>
               </div>
             ))}
-            {!pendingRequests.length && !loading ? (
+            {!resources.length && !loading ? (
               <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-muted">
-                No pending citizen requests right now.
+                No live resource inventory is available yet.
               </div>
             ) : null}
           </div>
-        </div>
         </Card>
 
         <Card>
-        <CardTitle>Add or update a resource</CardTitle>
-        <CardDescription className="mt-2">
-          Fast updates from the field keep routing and allocation accurate.
-        </CardDescription>
-        <form className="mt-6 space-y-4" onSubmit={onSubmit}>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-white" htmlFor="resource-name">
-              Resource name
-            </label>
-            <select
-              className="flex h-11 w-full rounded-2xl border border-slate-800 bg-slate-950/60 px-4 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-primary"
-              id="resource-name"
-              name="name"
-              required
-              value={form.name}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  name: event.target.value,
-                  otherName: event.target.value === "__other__" ? current.otherName : "",
-                  category: event.target.value === "__other__" ? current.category : "",
-                  unit: event.target.value === "__other__" ? current.unit : ""
-                }))
-              }
-            >
-              <option disabled hidden value="">
-                Select a resource
-              </option>
-              {resourceOptions.map((resource) => (
-                <option key={resource.id} value={resource.name}>
-                  {resource.name}
+          <CardTitle>Add or update a resource</CardTitle>
+          <CardDescription className="mt-2">
+            Fast updates from the field keep routing and allocation accurate.
+          </CardDescription>
+          <form className="mt-6 space-y-4" onSubmit={onSubmit}>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-white" htmlFor="resource-name">
+                Resource name
+              </label>
+              <select
+                className="flex h-11 w-full rounded-2xl border border-slate-800 bg-slate-950/60 px-4 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-primary"
+                id="resource-name"
+                name="name"
+                required
+                value={form.name}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    name: event.target.value,
+                    otherName: event.target.value === "__other__" ? current.otherName : "",
+                    category: event.target.value === "__other__" ? current.category : "",
+                    unit: event.target.value === "__other__" ? current.unit : ""
+                  }))
+                }
+              >
+                <option disabled hidden value="">
+                  Select a resource
                 </option>
-              ))}
-              <option value="__other__">Other</option>
-            </select>
-          </div>
-          {isOtherResource ? (
-            <Input
-              name="otherName"
-              placeholder="Enter resource name"
-              required
-              value={form.otherName}
-              onChange={(event) => setForm((current) => ({ ...current, otherName: event.target.value }))}
-            />
-          ) : null}
-          {!selectedExistingResource ? (
-            <Input
-              name="category"
-              placeholder="Category"
-              required={isOtherResource}
-              value={form.category}
-              onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
-            />
-          ) : null}
-          <Input
-            min={0}
-            name="quantity"
-            placeholder="Quantity"
-            required
-            type="number"
-            value={form.quantity}
-            onChange={(event) => setForm((current) => ({ ...current, quantity: event.target.value }))}
-          />
-          {!selectedExistingResource ? (
-            <Input
-              name="unit"
-              placeholder="Unit"
-              required={isOtherResource}
-              value={form.unit}
-              onChange={(event) => setForm((current) => ({ ...current, unit: event.target.value }))}
-            />
-          ) : null}
-          <Input
-            name="location"
-            placeholder='GeoJSON Point or POINT (77.8685 6.924)'
-            value={form.location}
-            onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))}
-          />
-          {selectedExistingResource ? (
-            <p className="text-sm text-muted">
-              Updating existing inventory for {selectedExistingResource.name}
-              {selectedExistingResource.category ? ` • ${selectedExistingResource.category}` : ""}
-              {selectedExistingResource.unit ? ` • ${selectedExistingResource.unit}` : ""}.
-            </p>
-          ) : null}
-          <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={requestLocation} type="button" variant="outline">
-              {locationLoading ? "Getting location..." : "Get current location"}
-            </Button>
-            {coordinates ? (
-              <span className="rounded-full bg-success/15 px-3 py-2 text-sm text-green-300">
-                {coordinates.latitude.toFixed(4)}, {coordinates.longitude.toFixed(4)}
-              </span>
+                {resourceOptions.map((resource) => (
+                  <option key={resource.id} value={resource.name}>
+                    {resource.name}
+                  </option>
+                ))}
+                <option value="__other__">Other</option>
+              </select>
+            </div>
+            {isOtherResource ? (
+              <Input
+                name="otherName"
+                placeholder="Enter resource name"
+                required
+                value={form.otherName}
+                onChange={(event) => setForm((current) => ({ ...current, otherName: event.target.value }))}
+              />
             ) : null}
-          </div>
-          {locationError ? <p className="text-sm text-danger">{locationError}</p> : null}
-          <Button className="w-full" disabled={savingResource} type="submit">
-            {savingResource ? "Saving..." : "Save resource update"}
-          </Button>
-        </form>
-        {message ? <p className="mt-4 text-sm text-success">{message}</p> : null}
+            {!selectedExistingResource ? (
+              <Input
+                name="category"
+                placeholder="Category"
+                required={isOtherResource}
+                value={form.category}
+                onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
+              />
+            ) : null}
+            <Input
+              min={0}
+              name="quantity"
+              placeholder="Quantity"
+              required
+              type="number"
+              value={form.quantity}
+              onChange={(event) => setForm((current) => ({ ...current, quantity: event.target.value }))}
+            />
+            {!selectedExistingResource ? (
+              <Input
+                name="unit"
+                placeholder="Unit"
+                required={isOtherResource}
+                value={form.unit}
+                onChange={(event) => setForm((current) => ({ ...current, unit: event.target.value }))}
+              />
+            ) : null}
+            <Input
+              name="location"
+              placeholder='GeoJSON Point or POINT (77.8685 6.924)'
+              value={form.location}
+              onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))}
+            />
+            {selectedExistingResource ? (
+              <p className="text-sm text-muted">
+                Updating existing inventory for {selectedExistingResource.name}
+                {selectedExistingResource.category ? ` • ${selectedExistingResource.category}` : ""}
+                {selectedExistingResource.unit ? ` • ${selectedExistingResource.unit}` : ""}.
+              </p>
+            ) : null}
+            <div className="flex flex-wrap items-center gap-3">
+              <Button onClick={requestLocation} type="button" variant="outline">
+                {locationLoading ? "Getting location..." : "Get current location"}
+              </Button>
+              {coordinates ? (
+                <span className="rounded-full bg-success/15 px-3 py-2 text-sm text-green-300">
+                  {coordinates.latitude.toFixed(4)}, {coordinates.longitude.toFixed(4)}
+                </span>
+              ) : null}
+            </div>
+            {locationError ? <p className="text-sm text-danger">{locationError}</p> : null}
+            <Button className="w-full" disabled={savingResource} type="submit">
+              {savingResource ? "Saving..." : "Save resource update"}
+            </Button>
+          </form>
+          {message ? <p className="mt-4 text-sm text-success">{message}</p> : null}
         </Card>
       </div>
     </div>
