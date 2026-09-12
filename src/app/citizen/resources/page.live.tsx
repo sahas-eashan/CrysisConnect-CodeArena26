@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { configureAmplify } from "@/lib/aws/amplify";
-import { queries } from "@/lib/aws/graphql/operations";
+import { mutations, queries } from "@/lib/aws/graphql/operations";
 import { mockResourceRequests, mockResources } from "@/lib/mock-data";
 import type { Resource } from "@/lib/types";
 
@@ -17,6 +17,7 @@ export default function CitizenResourcesPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL));
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!hasAwsConfig) return;
@@ -54,9 +55,52 @@ export default function CitizenResourcesPage() {
     };
   }, [hasAwsConfig]);
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setMessage("Resource request queued. In live mode this mutation will be sent to AppSync and visible to NGO teams immediately.");
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const resourceName = String(form.get("resourceName") ?? "").trim();
+    const quantity = Number(form.get("quantity"));
+    const urgency = String(form.get("urgency") ?? "normal");
+    const matchedResource = resources.find((resource) => resource.name.trim().toLowerCase() === resourceName.toLowerCase());
+
+    if (!hasAwsConfig) {
+      setMessage("Demo mode: resource request prepared locally. Connect AWS to save it in the backend.");
+      return;
+    }
+
+    configureAmplify();
+    const client = generateClient();
+
+    try {
+      setSaving(true);
+      setError(null);
+      setMessage(null);
+
+      const result = await client.graphql({
+        query: mutations.requestResource,
+        variables: {
+          input: {
+            resourceId: matchedResource?.id ?? null,
+            resourceName,
+            quantityNeeded: Number.isFinite(quantity) ? quantity : null,
+            urgency
+          }
+        }
+      });
+
+      const createdRequest = (result as any).data?.requestResource;
+      if (!createdRequest?.id) {
+        throw new Error("The backend did not return a saved resource request record.");
+      }
+
+      formElement.reset();
+      setMessage(`Resource request saved to the real backend. Request ID: ${createdRequest.id}`);
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Unable to save the resource request.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -108,8 +152,8 @@ export default function CitizenResourcesPage() {
             <option value="high">High urgency</option>
             <option value="critical">Critical urgency</option>
           </select>
-          <Button className="w-full" type="submit">
-            Submit resource request
+          <Button className="w-full" disabled={saving} type="submit">
+            {saving ? "Saving..." : "Submit resource request"}
           </Button>
         </form>
         {message ? <p className="mt-4 text-sm text-success">{message}</p> : null}
