@@ -147,6 +147,7 @@ type AiRecommendation {
   title: String!
   detail: String!
   priority: String!
+  relatedIds: [String!]
 }
 
 type AiTranslationSet {
@@ -265,6 +266,7 @@ type Mutation {
   triageSosCase(id: ID!): SosTriage!
   recommendResourceDispatch(id: ID!): ResourceDispatchPlan!
   prepareSosSubmission(input: AiPrepareSosInput!): PreparedSosSubmission!
+  reviewAiAuditLog(id: ID!, approved: Boolean!): AiAuditRef!
 }
 
 type Subscription {

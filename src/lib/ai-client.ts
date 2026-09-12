@@ -142,6 +142,17 @@ export async function getAiAuditLogs(limit = 20) {
   );
 }
 
+export async function reviewAiAuditLog(id: string, approved: boolean) {
+  const result = await runGraphql({
+    query: mutations.reviewAiAuditLog,
+    variables: { id, approved }
+  });
+
+  recentResponses.delete("getAiAuditLogs:20");
+  recentResponses.delete("getAiAuditLogs:50");
+  return requirePayload(result?.data?.reviewAiAuditLog as AiAuditRef | null | undefined, "AI audit review");
+}
+
 export async function generateIncidentBrief(disasterId?: string | null) {
   return runCached(`generateIncidentBrief:${disasterId ?? "active"}`, async () => {
     const result = await runGraphql({

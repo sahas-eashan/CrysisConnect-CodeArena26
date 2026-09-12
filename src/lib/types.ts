@@ -149,6 +149,7 @@ export type AiRecommendation = {
   title: string;
   detail: string;
   priority: string;
+  relatedIds?: string[] | null;
 };
 
 export type AiTranslationSet = {

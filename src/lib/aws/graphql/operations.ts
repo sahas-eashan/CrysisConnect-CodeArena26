@@ -403,6 +403,7 @@ export const mutations = {
           title
           detail
           priority
+          relatedIds
         }
         meta {
           status
@@ -478,6 +479,7 @@ export const mutations = {
           title
           detail
           priority
+          relatedIds
         }
         meta {
           status
@@ -519,6 +521,7 @@ export const mutations = {
           title
           detail
           priority
+          relatedIds
         }
         meta {
           status
@@ -557,6 +560,7 @@ export const mutations = {
           title
           detail
           priority
+          relatedIds
         }
         meta {
           status
@@ -616,6 +620,18 @@ export const mutations = {
             reasons
           }
         }
+      }
+    }
+  `,
+  reviewAiAuditLog: /* GraphQL */ `
+    mutation ReviewAiAuditLog($id: ID!, $approved: Boolean!) {
+      reviewAiAuditLog(id: $id, approved: $approved) {
+        id
+        action
+        model
+        status
+        createdAt
+        reviewStatus
       }
     }
   `
