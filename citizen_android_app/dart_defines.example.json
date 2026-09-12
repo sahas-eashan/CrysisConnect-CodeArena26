@@ -1,0 +1,7 @@
+{
+  "CRISIS_AWS_REGION": "ap-south-1",
+  "CRISIS_COGNITO_USER_POOL_ID": "ap-south-1_example",
+  "CRISIS_COGNITO_USER_POOL_CLIENT_ID": "exampleclientid",
+  "CRISIS_APPSYNC_GRAPHQL_URL": "https://example.appsync-api.ap-south-1.amazonaws.com/graphql",
+  "CRISIS_APPSYNC_API_NAME": "data"
+}

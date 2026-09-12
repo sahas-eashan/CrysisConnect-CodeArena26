@@ -237,6 +237,17 @@ export async function handler(event: AppSyncEvent) {
       );
       return rows.map(mapRequest);
     }
+    case "getMyResourceRequests": {
+      const { rows } = await pool.query(
+        `SELECT *, ST_AsGeoJSON(location) AS location
+         FROM resource_requests
+         WHERE requested_by = $1
+           AND ($2::text IS NULL OR status = $2)
+         ORDER BY created_at DESC`,
+        [userId, args.status ?? null]
+      );
+      return rows.map(mapRequest);
+    }
     case "getSOSSignals": {
       requireGroup(event, ["ngo", "government"]);
       const { rows } = await pool.query(
@@ -247,6 +258,42 @@ export async function handler(event: AppSyncEvent) {
         [args.status ?? null]
       );
       return rows.map(mapSOS);
+    }
+    case "getMySOSSignals": {
+      const client = await pool.connect();
+      try {
+        const { rows } = await client.query(
+          `SELECT *, ST_AsGeoJSON(location) AS location
+           FROM sos_signals
+           WHERE sender_id = $1
+             AND ($2::text IS NULL OR status = $2)
+           ORDER BY created_at DESC`,
+          [userId, args.status ?? null]
+        );
+
+        const signals = await Promise.all(
+          rows.map(async (row) => {
+            const responders = await client.query(
+              `SELECT id, role, full_name, phone, email, is_available,
+                      ST_Distance(location, ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)::geography) AS distance
+               FROM profiles
+               WHERE role IN ('ngo_individual', 'ngo_org_member') AND is_available = true
+               ORDER BY distance ASC
+               LIMIT 3`,
+              [row.location]
+            );
+
+            return {
+              ...mapSOS(row),
+              nearestResponders: responders.rows.map(mapProfile)
+            };
+          })
+        );
+
+        return signals;
+      } finally {
+        client.release();
+      }
     }
     case "getNewsUpdates": {
       const { rows } = await pool.query(

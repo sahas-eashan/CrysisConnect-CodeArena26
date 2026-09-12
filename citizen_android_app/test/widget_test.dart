@@ -1,13 +1,15 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:crisisconnect_citizen/main.dart';
+import 'package:crisisconnect_citizen/app/app.dart';
 
 void main() {
-  testWidgets('renders citizen dashboard shell', (WidgetTester tester) async {
+  testWidgets('shows missing config state without dart defines', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(const CrisisConnectApp());
+    await tester.pumpAndSettle();
 
-    expect(find.text('CrisisConnect'), findsOneWidget);
-    expect(find.text('Heavy Rain & Landslide Warning'), findsOneWidget);
-    expect(find.text('GET ME TO SAFETY'), findsOneWidget);
+    expect(find.text('Backend config required'), findsOneWidget);
+    expect(find.textContaining('CRISIS_AWS_REGION'), findsOneWidget);
   });
 }

@@ -61,6 +61,22 @@ export const queries = {
       }
     }
   `,
+  getMyResourceRequests: /* GraphQL */ `
+    query GetMyResourceRequests($status: String) {
+      getMyResourceRequests(status: $status) {
+        id
+        requestedBy
+        resourceId
+        resourceName
+        quantityNeeded
+        urgency
+        status
+        fulfilledBy
+        createdAt
+        location
+      }
+    }
+  `,
   getSOSSignals: /* GraphQL */ `
     query GetSOSSignals($status: String) {
       getSOSSignals(status: $status) {
@@ -73,6 +89,28 @@ export const queries = {
         assignedTo
         disasterId
         createdAt
+        nearestResponders {
+          id
+          fullName
+          phone
+          distance
+        }
+      }
+    }
+  `,
+  getMySOSSignals: /* GraphQL */ `
+    query GetMySOSSignals($status: String) {
+      getMySOSSignals(status: $status) {
+        id
+        senderId
+        location
+        type
+        description
+        status
+        assignedTo
+        disasterId
+        createdAt
+        resolvedAt
         nearestResponders {
           id
           fullName
@@ -272,6 +310,23 @@ export const subscriptions = {
       }
     }
   `,
+  onMySOSUpdate: /* GraphQL */ `
+    subscription OnMySOSUpdate($senderId: String!) {
+      onMySOSUpdate(senderId: $senderId) {
+        id
+        senderId
+        status
+        assignedTo
+        resolvedAt
+        nearestResponders {
+          id
+          fullName
+          phone
+          distance
+        }
+      }
+    }
+  `,
   onResourceUpdate: /* GraphQL */ `
     subscription OnResourceUpdate {
       onResourceUpdate {
@@ -290,6 +345,20 @@ export const subscriptions = {
         quantityNeeded
         urgency
         status
+      }
+    }
+  `,
+  onMyResourceRequestUpdate: /* GraphQL */ `
+    subscription OnMyResourceRequestUpdate($requestedBy: String!) {
+      onMyResourceRequestUpdate(requestedBy: $requestedBy) {
+        id
+        requestedBy
+        resourceName
+        quantityNeeded
+        urgency
+        status
+        fulfilledBy
+        createdAt
       }
     }
   `,

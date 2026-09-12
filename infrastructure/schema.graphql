@@ -115,7 +115,9 @@ type Query {
   getNearestSafeZone(lat: Float!, lon: Float!): SafeZone
   getResources(disasterId: ID, category: String): [Resource!]!
   getResourceRequests(status: String): [ResourceRequest!]!
+  getMyResourceRequests(status: String): [ResourceRequest!]!
   getSOSSignals(status: String): [SOSSignal!]!
+  getMySOSSignals(status: String): [SOSSignal!]!
   getNewsUpdates(disasterId: ID): [NewsUpdate!]!
   getOrganizations(status: String): [Organization!]!
   getDashboardStats: DashboardStats!
@@ -144,7 +146,9 @@ type Subscription {
   onDisasterUpdate: Disaster @aws_subscribe(mutations: ["updateDisaster"])
   onNewSOS: SOSSignal @aws_subscribe(mutations: ["createSOS"])
   onSOSUpdate: SOSSignal @aws_subscribe(mutations: ["acceptSOS", "resolveSOS"])
+  onMySOSUpdate(senderId: String!): SOSSignal @aws_subscribe(mutations: ["createSOS", "acceptSOS", "resolveSOS"])
   onNewResourceRequest: ResourceRequest @aws_subscribe(mutations: ["requestResource"])
+  onMyResourceRequestUpdate(requestedBy: String!): ResourceRequest @aws_subscribe(mutations: ["requestResource", "fulfillResourceRequest"])
   onResourceUpdate: Resource @aws_subscribe(mutations: ["createResource", "updateResource"])
   onNewNews: NewsUpdate @aws_subscribe(mutations: ["createNewsUpdate"])
   onAlert: AlertResult @aws_subscribe(mutations: ["sendAlert"])
