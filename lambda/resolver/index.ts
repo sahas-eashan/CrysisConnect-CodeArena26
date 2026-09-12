@@ -459,8 +459,6 @@ export async function handler(event: AppSyncEvent) {
          RETURNING *, ST_AsGeoJSON(affected_area) AS affected_area, ST_AsGeoJSON(center_point) AS center_point`,
         [input.title, input.description ?? null, input.type, input.severity, input.radiusKm ?? null, input.secondaryRisks ?? [], userId]
       );
-
-      await triggerWorker({ action: "DISASTER_ALERT", disaster: rows[0] });
       return mapDisaster(rows[0]);
     }
     case "updateDisaster": {
@@ -850,7 +848,13 @@ export async function handler(event: AppSyncEvent) {
         [input.title, input.body, input.channel, targetRoles, input.disasterId ?? null, userId]
       );
 
-      await triggerWorker({ action: "DIRECT_ALERT", alert: input });
+      await triggerWorker({
+        action: "DIRECT_ALERT",
+        alert: {
+          ...input,
+          targetRoles
+        }
+      });
       return {
         sent: Array.isArray(input.channel) ? input.channel.length : 1,
         channel: Array.isArray(input.channel) ? input.channel.join(", ") : String(input.channel)

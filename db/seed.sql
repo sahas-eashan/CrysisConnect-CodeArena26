@@ -3,9 +3,16 @@ VALUES
   ('gov-demo-1', 'government', 'Disaster Control Center', '+94770000001', 'gov@crisisconnect.demo', ST_GeogFromText('POINT(79.8612 6.9271)'), true),
   ('ngo-demo-1', 'ngo_org_member', 'Ayesha Perera', '+94770000002', 'ayesha@ngo.demo', ST_GeogFromText('POINT(79.8700 6.9300)'), true),
   ('ngo-demo-2', 'ngo_individual', 'Ruwan Silva', '+94770000003', 'ruwan@ngo.demo', ST_GeogFromText('POINT(79.8760 6.9350)'), true),
-  ('citizen-demo-1', 'citizen', 'Nimal Fernando', '+94770000004', 'nimal@demo.com', ST_GeogFromText('POINT(79.8685 6.9240)'), true),
-  ('citizen-demo-2', 'citizen', 'Kasuni Jayasekara', '+94770000005', 'kasuni@demo.com', ST_GeogFromText('POINT(79.8820 6.9400)'), true)
-ON CONFLICT (id) DO NOTHING;
+  ('citizen-demo-1', 'citizen', 'Nuwan Dhananjaya', '+94769635843', 'nuwan@demo.com', ST_GeogFromText('POINT(79.8685 6.9240)'), true),
+  ('citizen-demo-2', 'citizen', 'Sahas Eashan', '+94776413121', 'sahas@demo.com', ST_GeogFromText('POINT(79.8820 6.9400)'), true),
+  ('citizen-demo-3', 'citizen', 'Himeth Walgampaya', '+94742885820', 'himeth@demo.com', ST_GeogFromText('POINT(79.8740 6.9365)'), true)
+ON CONFLICT (id) DO UPDATE
+SET role = EXCLUDED.role,
+    full_name = EXCLUDED.full_name,
+    phone = EXCLUDED.phone,
+    email = EXCLUDED.email,
+    location = EXCLUDED.location,
+    is_available = EXCLUDED.is_available;
 
 INSERT INTO organizations (id, name, type, description, approval_status, approved_by, created_by)
 VALUES
