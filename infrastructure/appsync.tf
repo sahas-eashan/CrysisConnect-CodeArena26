@@ -111,6 +111,7 @@ locals {
     "Mutation.triageSosCase"              = "Mutation"
     "Mutation.recommendResourceDispatch"  = "Mutation"
     "Mutation.prepareSosSubmission"       = "Mutation"
+    "Mutation.reviewAiAuditLog"           = "Mutation"
   }
 }
 
