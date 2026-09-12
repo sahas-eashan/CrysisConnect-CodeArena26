@@ -425,7 +425,7 @@ export async function handler(event: AppSyncEvent) {
       requireGroup(event, ["government"]);
       const { rows } = await pool.query(
         `SELECT * FROM organizations
-         WHERE ($1::text IS NULL OR approval_status = $1)
+         WHERE ($1::text IS NULL OR approval_status::text = $1)
          ORDER BY created_at DESC`,
         [args.status ?? null]
       );
@@ -871,7 +871,7 @@ export async function handler(event: AppSyncEvent) {
       const status = args.approved ? "approved" : "rejected";
       const { rows } = await pool.query(
         `UPDATE organizations
-         SET approval_status = $2, approved_by = $3
+         SET approval_status = $2::org_approval, approved_by = $3
          WHERE id = $1
          RETURNING *`,
         [args.id, status, userId]

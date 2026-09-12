@@ -651,15 +651,53 @@ function ensureStringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
+function stripRawRecordReferences(value: string) {
+  return value
+    .replace(/\(ID:\s*([^)]+)\)/gi, "")
+    .replace(/\bIDs?:\s*[0-9a-f,\s-]{36,}/gi, "")
+    .replace(/\(([0-9a-f,\s-]{36,})\)/gi, "")
+    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([.,;:])/g, "$1")
+    .trim();
+}
+
 function validateRecommendationList(value: any) {
   if (!Array.isArray(value)) return [];
   return value
     .filter((item) => item && typeof item.title === "string" && typeof item.detail === "string")
     .map((item) => ({
-      title: String(item.title),
-      detail: String(item.detail),
-      priority: typeof item.priority === "string" ? item.priority : "medium"
+      title: stripRawRecordReferences(String(item.title)),
+      detail: stripRawRecordReferences(String(item.detail)),
+      priority: typeof item.priority === "string" ? item.priority : "medium",
+      relatedIds: ensureStringArray(item.relatedIds)
     }));
+}
+
+function deriveOperationRecommendationIds(
+  recommendation: { title: string; detail: string; relatedIds?: string[] },
+  context: { sosSignals: DbRow[]; resources: DbRow[]; safeZones: DbRow[] }
+) {
+  if (recommendation.relatedIds?.length) {
+    return recommendation.relatedIds;
+  }
+
+  const text = `${recommendation.title} ${recommendation.detail}`.toLowerCase();
+  const ids = new Set<string>();
+
+  if (/(sos|evac|rescue|responder|assignment|trapped|medical emergency)/.test(text)) {
+    context.sosSignals.slice(0, 3).forEach((signal) => ids.add(String(signal.id)));
+  }
+
+  if (/(resource|stock|supply|inventory|food|water|medical kit|medical suppl|aid)/.test(text)) {
+    context.resources.slice(0, 3).forEach((resource) => ids.add(String(resource.id)));
+  }
+
+  if (/(shelter|safe zone|capacity|occupancy|camp)/.test(text)) {
+    context.safeZones.slice(0, 3).forEach((zone) => ids.add(String(zone.id)));
+  }
+
+  return [...ids];
 }
 
 function validateTranslations(value: any) {
@@ -1149,7 +1187,7 @@ async function recommendOperations(event: AppSyncEvent) {
       taskName: "recommendOperations",
       model: INTERACTIVE_MODEL,
       systemInstruction:
-        "You are ranking disaster command actions for the next shift. Use only the structured data provided, avoid unsupported certainty, and prefer operationally practical steps.",
+        "You are ranking disaster command actions for the next shift. Use only the structured data provided, avoid unsupported certainty, prefer operationally practical steps, and never print raw UUIDs or record IDs in the visible title or detail. Put any case references in relatedIds only.",
       prompt: JSON.stringify({
         task: "recommend_operations",
         timeframe,
@@ -1169,7 +1207,8 @@ async function recommendOperations(event: AppSyncEvent) {
           {
             title: "string",
             detail: "string",
-            priority: "string"
+            priority: "string",
+            relatedIds: ["string"]
           }
         ]
       }
@@ -1179,7 +1218,14 @@ async function recommendOperations(event: AppSyncEvent) {
       const payload = {
         timeframe: typeof (generated as any).timeframe === "string" ? (generated as any).timeframe : timeframe,
         rationale: validateRationale((generated as any).rationale),
-        recommendations: validateRecommendationList((generated as any).recommendations)
+        recommendations: validateRecommendationList((generated as any).recommendations).map((recommendation) => ({
+          ...recommendation,
+          relatedIds: deriveOperationRecommendationIds(recommendation, {
+            sosSignals,
+            resources,
+            safeZones
+          })
+        }))
       };
 
       const sources = sourceIds(...safeZones.map((zone) => zone.id), ...resources.map((resource) => resource.id), ...sosSignals.map((signal) => signal.id));
@@ -1435,6 +1481,25 @@ async function getAiAuditLogs(event: AppSyncEvent) {
   return rows.map(mapAudit);
 }
 
+async function reviewAiAuditLog(event: AppSyncEvent) {
+  requireRole(event, ["government"]);
+
+  const reviewStatus = event.arguments.approved ? "approved" : "rejected";
+  const { rows } = await pool.query(
+    `UPDATE ai_audit_logs
+     SET review_status = $2
+     WHERE id = $1
+     RETURNING *`,
+    [event.arguments.id, reviewStatus]
+  );
+
+  if (!rows[0]) {
+    throw new Error("AI audit record not found.");
+  }
+
+  return mapAudit(rows[0]);
+}
+
 export async function handler(event: AppSyncEvent) {
   const userId = requireUserId(event);
   if (userId) {
@@ -1446,6 +1511,8 @@ export async function handler(event: AppSyncEvent) {
       return generateCitizenGuidance(event);
     case "getAiAuditLogs":
       return getAiAuditLogs(event);
+    case "reviewAiAuditLog":
+      return reviewAiAuditLog(event);
     case "prepareSosSubmission":
       return generatePreparedSos(event);
     case "generateIncidentBrief":

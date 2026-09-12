@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 
 const recordIdPattern = /\(ID:\s*([^)]+)\)/gi;
+const uuidPattern = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gi;
 
 function priorityBadgeClass(priority?: string) {
   const normalized = priority?.toLowerCase() ?? "medium";
@@ -23,7 +24,7 @@ function priorityBadgeClass(priority?: string) {
 function resolveCommandLink(id: string, context: string) {
   const lower = context.toLowerCase();
   if (lower.includes("sos") || lower.includes("responder") || lower.includes("evacuation")) {
-    return `/ngo/sos-queue#${id}`;
+    return `/admin/sos-queue#${id}`;
   }
   if (lower.includes("resource") || lower.includes("inventory") || lower.includes("stock")) {
     return `/admin/resources#${id}`;
@@ -34,36 +35,90 @@ function resolveCommandLink(id: string, context: string) {
   return `/admin/disasters#${id}`;
 }
 
-function renderRecommendationDetail(detail: string, recommendationTitle: string) {
-  const matches = [...detail.matchAll(recordIdPattern)];
-  const cleaned = detail.replace(recordIdPattern, "").replace(/\s{2,}/g, " ").trim();
+function resolveCommandDestination(context: string) {
+  const lower = context.toLowerCase();
+  if (lower.includes("sos") || lower.includes("responder") || lower.includes("evacuation") || lower.includes("rescue")) {
+    return { href: "/admin/sos-queue", label: "Open SOS queue" };
+  }
+  if (lower.includes("resource") || lower.includes("inventory") || lower.includes("stock") || lower.includes("supply")) {
+    return { href: "/admin/resources", label: "Open resources" };
+  }
+  if (lower.includes("shelter") || lower.includes("safe zone") || lower.includes("capacity")) {
+    return { href: "/admin/safe-zones", label: "Open shelters" };
+  }
+  return { href: "/admin/disasters", label: "Open incident" };
+}
+
+function linkLabelForHref(href: string, index: number, total: number) {
+  const baseLabel = href.startsWith("/admin/sos-queue")
+    ? "Open SOS case"
+    : href.startsWith("/admin/resources")
+      ? "Open resource"
+      : href.startsWith("/admin/safe-zones")
+        ? "Open shelter"
+        : "Open incident";
+
+  return total > 1 ? `${baseLabel} ${index + 1}` : baseLabel;
+}
+
+function renderRecommendationDetail(
+  detail: string,
+  recommendationTitle: string,
+  relatedIds?: string[] | null
+) {
+  const labeledMatches = [...detail.matchAll(recordIdPattern)].flatMap((match) =>
+    match[1]
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean)
+  );
+  const rawUuidMatches = detail.match(uuidPattern) ?? [];
+  const caseIds = [...new Set([...(relatedIds ?? []), ...labeledMatches, ...rawUuidMatches])];
+  const cleaned = detail
+    .replace(recordIdPattern, "")
+    .replace(/\(([0-9a-f,\s-]{36,})\)/gi, "")
+    .replace(/\bIDs?:\s*[0-9a-f,\s-]{36,}/gi, "")
+    .replace(uuidPattern, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([.,])/g, "$1")
+    .trim();
+  const destination = resolveCommandDestination(`${recommendationTitle} ${detail}`);
 
   return (
     <div className="mt-2 space-y-3 text-sm text-slate-200">
       <p>{cleaned}</p>
-      {matches.length ? (
+      {caseIds.length ? (
         <div className="flex flex-wrap gap-2">
-          {matches.map((match) => {
-            const id = match[1].trim();
+          {caseIds.map((id, index) => {
+            const href = resolveCommandLink(id, `${recommendationTitle} ${detail}`);
             return (
               <Link
                 className="inline-flex items-center rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-medium text-primary transition hover:bg-primary/20"
-                href={resolveCommandLink(id, `${recommendationTitle} ${detail}`)}
-                key={`${recommendationTitle}-${id}`}
+                href={href}
+                key={`${recommendationTitle}-${id}-${index}`}
               >
-                Open related record
+                {linkLabelForHref(href, index, caseIds.length)}
               </Link>
             );
           })}
         </div>
-      ) : null}
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <Link
+            className="inline-flex items-center rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-medium text-primary transition hover:bg-primary/20"
+            href={destination.href}
+          >
+            {destination.label}
+          </Link>
+        </div>
+      )}
     </div>
   );
 }
 
 function sourceLinkForId(id: string) {
   if (id.startsWith("ngo") || id.startsWith("sos") || id === "88888888-8888-8888-8888-888888888888") {
-    return `/ngo/sos-queue#${id}`;
+    return `/admin/sos-queue#${id}`;
   }
 
   if (id.startsWith("res") || id.startsWith("req")) {
@@ -148,7 +203,7 @@ export function GovernmentAiConsole({ disasterId }: { disasterId?: string | null
                   <p className="font-medium text-white">{recommendation.title}</p>
                   <Badge className={priorityBadgeClass(recommendation.priority)}>{recommendation.priority}</Badge>
                 </div>
-                {renderRecommendationDetail(recommendation.detail, recommendation.title)}
+                {renderRecommendationDetail(recommendation.detail, recommendation.title, recommendation.relatedIds)}
               </div>
             ))}
           </div>

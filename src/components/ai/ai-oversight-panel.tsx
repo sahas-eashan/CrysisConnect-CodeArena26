@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Activity } from "lucide-react";
 
-import { getAiAuditLogs } from "@/lib/ai-client";
+import { getAiAuditLogs, reviewAiAuditLog } from "@/lib/ai-client";
 import type { AiAuditRef } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ export function AiOversightPanel() {
   const [logs, setLogs] = useState<AiAuditRef[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -29,6 +30,19 @@ export function AiOversightPanel() {
   useEffect(() => {
     void load();
   }, []);
+
+  async function handleReview(id: string, approved: boolean) {
+    try {
+      setReviewingId(id);
+      setError(null);
+      const updated = await reviewAiAuditLog(id, approved);
+      setLogs((current) => current.map((log) => (log.id === id ? updated : log)));
+    } catch (reviewError) {
+      setError(reviewError instanceof Error ? reviewError.message : "Unable to save AI review.");
+    } finally {
+      setReviewingId(null);
+    }
+  }
 
   return (
     <Card>
@@ -60,8 +74,37 @@ export function AiOversightPanel() {
               <div className="flex flex-wrap gap-2">
                 <Badge>{log.model}</Badge>
                 <Badge>{log.status}</Badge>
-                <Badge>{log.reviewStatus ?? "pending_review"}</Badge>
+                <Badge
+                  className={
+                    log.reviewStatus === "approved"
+                      ? "border-success/40 bg-success/15 text-success"
+                      : log.reviewStatus === "rejected"
+                        ? "border-danger/40 bg-danger/15 text-danger"
+                        : "border-secondary/40 bg-secondary/10 text-secondary"
+                  }
+                >
+                  {log.reviewStatus ?? "pending_review"}
+                </Badge>
               </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button
+                className="rounded-full px-4 py-2"
+                disabled={reviewingId === log.id || log.reviewStatus === "approved"}
+                onClick={() => void handleReview(log.id, true)}
+                variant="success"
+              >
+                {reviewingId === log.id ? "Saving..." : log.reviewStatus === "approved" ? "Approved" : "Approve"}
+              </Button>
+              <Button
+                className="rounded-full px-4 py-2"
+                disabled={reviewingId === log.id || log.reviewStatus === "rejected"}
+                onClick={() => void handleReview(log.id, false)}
+                variant="danger"
+              >
+                {reviewingId === log.id ? "Saving..." : log.reviewStatus === "rejected" ? "Rejected" : "Reject"}
+              </Button>
             </div>
           </div>
         ))}

@@ -259,6 +259,18 @@ export const mutations = {
       }
     }
   `,
+  updateSafeZoneOccupancy: /* GraphQL */ `
+    mutation UpdateSafeZoneOccupancy($id: ID!, $delta: Int!) {
+      updateSafeZoneOccupancy(id: $id, delta: $delta) {
+        id
+        name
+        capacity
+        currentOccupancy
+        location
+        status
+      }
+    }
+  `,
   createResource: /* GraphQL */ `
     mutation CreateResource($input: ResourceInput!) {
       createResource(input: $input) {
@@ -327,6 +339,16 @@ export const mutations = {
       }
     }
   `,
+  resolveSOS: /* GraphQL */ `
+    mutation ResolveSOS($id: ID!) {
+      resolveSOS(id: $id) {
+        id
+        status
+        assignedTo
+        resolvedAt
+      }
+    }
+  `,
   createNewsUpdate: /* GraphQL */ `
     mutation CreateNewsUpdate($input: NewsInput!) {
       createNewsUpdate(input: $input) {
@@ -381,6 +403,7 @@ export const mutations = {
           title
           detail
           priority
+          relatedIds
         }
         meta {
           status
@@ -456,6 +479,7 @@ export const mutations = {
           title
           detail
           priority
+          relatedIds
         }
         meta {
           status
@@ -497,6 +521,7 @@ export const mutations = {
           title
           detail
           priority
+          relatedIds
         }
         meta {
           status
@@ -535,6 +560,7 @@ export const mutations = {
           title
           detail
           priority
+          relatedIds
         }
         meta {
           status
@@ -594,6 +620,18 @@ export const mutations = {
             reasons
           }
         }
+      }
+    }
+  `,
+  reviewAiAuditLog: /* GraphQL */ `
+    mutation ReviewAiAuditLog($id: ID!, $approved: Boolean!) {
+      reviewAiAuditLog(id: $id, approved: $approved) {
+        id
+        action
+        model
+        status
+        createdAt
+        reviewStatus
       }
     }
   `

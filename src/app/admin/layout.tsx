@@ -3,6 +3,8 @@ import { PortalShell } from "@/components/shared/portal-shell";
 const items = [
   { href: "/admin/dashboard", label: "Dashboard" },
   { href: "/admin/disasters", label: "Disasters" },
+  { href: "/admin/map", label: "Command Map" },
+  { href: "/admin/sos-queue", label: "SOS Queue" },
   { href: "/admin/safe-zones", label: "Safe Zones" },
   { href: "/admin/approvals", label: "Approvals" },
   { href: "/admin/alerts", label: "Alerts" },

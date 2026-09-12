@@ -385,6 +385,24 @@ class _AiPreparedSosCard extends StatelessWidget {
 
   final PreparedSos result;
 
+  String _localizedSummary(BuildContext context) {
+    final languageCode = Localizations.localeOf(context).languageCode;
+    switch (languageCode) {
+      case 'si':
+        return result.translations.sinhala.isNotEmpty
+            ? result.translations.sinhala
+            : result.refined;
+      case 'ta':
+        return result.translations.tamil.isNotEmpty
+            ? result.translations.tamil
+            : result.refined;
+      default:
+        return result.translations.english.isNotEmpty
+            ? result.translations.english
+            : result.refined;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -404,7 +422,7 @@ class _AiPreparedSosCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          Text(result.refined),
+          Text(_localizedSummary(context)),
           const SizedBox(height: 10),
           ...result.checklist.map(
             (item) => Padding(
