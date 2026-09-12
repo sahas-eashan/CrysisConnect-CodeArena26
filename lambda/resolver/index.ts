@@ -508,13 +508,89 @@ export async function handler(event: AppSyncEvent) {
     case "createResource": {
       requireGroup(event, ["ngo", "government"]);
       const input = args.input;
-      const { rows } = await pool.query(
-        `INSERT INTO resources (name, category, quantity, unit, status, location, managed_by, org_id, disaster_id)
-         VALUES ($1, $2, $3, $4, 'available', ${geoJsonSql(input.location)}, $5, $6, $7)
-         RETURNING *, ST_AsGeoJSON(location) AS location`,
-        [input.name, input.category ?? null, input.quantity ?? null, input.unit ?? null, userId, input.orgId ?? null, input.disasterId ?? null]
-      );
-      return mapResource(rows[0]);
+      const client = await pool.connect();
+
+      try {
+        await client.query("BEGIN");
+
+        const normalizedName = typeof input.name === "string" ? input.name.trim() : "";
+        if (!normalizedName) {
+          throw new Error("Resource name is required.");
+        }
+
+        const quantityToAdd = Math.max(0, Number(input.quantity ?? 0));
+        const existingResourceResult = await client.query(
+          `SELECT *
+           FROM resources
+           WHERE lower(trim(name)) = lower(trim($1))
+           ORDER BY created_at DESC
+           LIMIT 1
+           FOR UPDATE`,
+          [normalizedName]
+        );
+
+        const existingResource = existingResourceResult.rows[0];
+
+        if (existingResource) {
+          const nextQuantity = Math.max(0, Number(existingResource.quantity ?? 0) + quantityToAdd);
+          const { rows } = await client.query(
+            `UPDATE resources
+             SET quantity = $2,
+                 location = COALESCE(${geoJsonSql(input.location)}, location),
+                 managed_by = $3,
+                 org_id = COALESCE($4, org_id),
+                 disaster_id = COALESCE($5, disaster_id),
+                 status = CASE
+                   WHEN $2 <= 0 THEN 'depleted'::resource_status
+                   WHEN $2 < 10 THEN 'low'::resource_status
+                   ELSE 'available'::resource_status
+                 END
+             WHERE id = $1
+             RETURNING *, ST_AsGeoJSON(location) AS location`,
+            [existingResource.id, nextQuantity, userId, input.orgId ?? null, input.disasterId ?? null]
+          );
+
+          await client.query("COMMIT");
+          return mapResource(rows[0]);
+        }
+
+        const { rows } = await client.query(
+          `INSERT INTO resources (name, category, quantity, unit, status, location, managed_by, org_id, disaster_id)
+           VALUES (
+             $1,
+             $2,
+             $3,
+             $4,
+             CASE
+               WHEN COALESCE($3, 0) <= 0 THEN 'depleted'::resource_status
+               WHEN COALESCE($3, 0) < 10 THEN 'low'::resource_status
+               ELSE 'available'::resource_status
+             END,
+             ${geoJsonSql(input.location)},
+             $5,
+             $6,
+             $7
+           )
+           RETURNING *, ST_AsGeoJSON(location) AS location`,
+          [
+            normalizedName,
+            input.category ?? null,
+            input.quantity ?? null,
+            input.unit ?? null,
+            userId,
+            input.orgId ?? null,
+            input.disasterId ?? null
+          ]
+        );
+
+        await client.query("COMMIT");
+        return mapResource(rows[0]);
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
     }
     case "updateResource": {
       requireGroup(event, ["ngo", "government"]);
@@ -551,14 +627,141 @@ export async function handler(event: AppSyncEvent) {
     case "fulfillResourceRequest": {
       requireGroup(event, ["ngo", "government"]);
       await ensureProfile(pool, event, userId);
-      const { rows } = await pool.query(
-        `UPDATE resource_requests
-         SET status = 'fulfilled', fulfilled_by = $2
-         WHERE id = $1
-         RETURNING *, ST_AsGeoJSON(location) AS location`,
-        [args.id, userId]
-      );
-      return mapRequest(rows[0]);
+      const client = await pool.connect();
+
+      try {
+        await client.query("BEGIN");
+
+        const requestResult = await client.query(
+          `SELECT *
+           FROM resource_requests
+           WHERE id = $1
+           FOR UPDATE`,
+          [args.id]
+        );
+
+        const requestRow = requestResult.rows[0];
+        if (!requestRow) {
+          throw new Error("Resource request not found.");
+        }
+
+        const requestedAmount = Math.max(0, Number(requestRow.quantity_needed ?? 0));
+        const normalizedRequestName =
+          typeof requestRow.resource_name === "string" ? requestRow.resource_name.trim() : "";
+        let resourceRow: Record<string, any> | undefined;
+
+        if (requestRow.resource_id) {
+          const resourceResult = await client.query(
+            `SELECT *
+             FROM resources
+             WHERE id = $1
+             FOR UPDATE`,
+            [requestRow.resource_id]
+          );
+          resourceRow = resourceResult.rows[0];
+        }
+
+        if (!resourceRow && normalizedRequestName) {
+          const resourceResult = await client.query(
+            `SELECT *
+             FROM resources
+             WHERE lower(trim(name)) = lower(trim($1))
+             ORDER BY COALESCE(quantity, 0) DESC, created_at DESC
+             LIMIT 1
+             FOR UPDATE`,
+            [requestRow.resource_name]
+          );
+          resourceRow = resourceResult.rows[0];
+        }
+
+        let updatedRequest;
+
+        if (!resourceRow) {
+          const pendingResult = await client.query(
+            `UPDATE resource_requests
+             SET status = CASE
+                   WHEN lower(COALESCE(status, 'pending')) = 'partially_fulfilled' THEN 'partially_fulfilled'
+                   ELSE 'pending'
+                 END
+             WHERE id = $1
+             RETURNING *, ST_AsGeoJSON(location) AS location`,
+            [args.id]
+          );
+          updatedRequest = pendingResult.rows[0];
+        } else {
+          const availableAmount = Math.max(0, Number(resourceRow.quantity ?? 0));
+
+          if (availableAmount <= 0) {
+            await client.query(`DELETE FROM resources WHERE id = $1`, [resourceRow.id]);
+
+            const pendingResult = await client.query(
+              `UPDATE resource_requests
+               SET status = CASE
+                     WHEN lower(COALESCE(status, 'pending')) = 'partially_fulfilled' THEN 'partially_fulfilled'
+                     ELSE 'pending'
+                   END,
+                   resource_id = COALESCE(resource_id, $2)
+               WHERE id = $1
+               RETURNING *, ST_AsGeoJSON(location) AS location`,
+              [args.id, resourceRow.id]
+            );
+            updatedRequest = pendingResult.rows[0];
+          } else if (availableAmount >= requestedAmount) {
+            const remainingResourceAmount = Math.max(0, availableAmount - requestedAmount);
+
+            if (remainingResourceAmount <= 0) {
+              await client.query(`DELETE FROM resources WHERE id = $1`, [resourceRow.id]);
+            } else {
+              await client.query(
+                `UPDATE resources
+                 SET quantity = $2,
+                     status = CASE
+                       WHEN $2 <= 0 THEN 'depleted'::resource_status
+                       WHEN $2 < 10 THEN 'low'::resource_status
+                       ELSE 'available'::resource_status
+                     END
+                 WHERE id = $1`,
+                [resourceRow.id, remainingResourceAmount]
+              );
+            }
+
+            const fulfilledResult = await client.query(
+              `UPDATE resource_requests
+               SET status = 'fulfilled',
+                   fulfilled_by = $2,
+                   resource_id = COALESCE(resource_id, $3)
+               WHERE id = $1
+               RETURNING *, ST_AsGeoJSON(location) AS location`,
+              [args.id, userId, resourceRow.id]
+            );
+            updatedRequest = fulfilledResult.rows[0];
+          } else {
+            const remainingRequestAmount = Math.max(0, requestedAmount - availableAmount);
+
+            await client.query(`DELETE FROM resources WHERE id = $1`, [resourceRow.id]);
+
+            const pendingResult = await client.query(
+              `UPDATE resource_requests
+               SET quantity_needed = $2,
+                   status = CASE WHEN $2 <= 0 THEN 'fulfilled' ELSE 'partially_fulfilled' END,
+                   fulfilled_by = $3,
+                   resource_id = COALESCE(resource_id, $4)
+               WHERE id = $1
+               RETURNING *, ST_AsGeoJSON(location) AS location`,
+              [args.id, remainingRequestAmount, userId, resourceRow.id]
+            );
+            updatedRequest = pendingResult.rows[0];
+          }
+        }
+
+        await client.query("COMMIT");
+        return mapRequest(updatedRequest);
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
     }
     case "createSOS": {
       const input = args.input;

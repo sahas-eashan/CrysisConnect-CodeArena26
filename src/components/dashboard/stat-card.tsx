@@ -3,11 +3,13 @@ import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 export function StatCard({
   label,
   value,
-  helper
+  helper,
+  loading = false
 }: {
   label: string;
   value: string | number;
   helper?: string;
+  loading?: boolean;
 }) {
   return (
     <Card className="border-white/10 bg-gradient-to-br from-slate-950/95 via-slate-900/90 to-sky-950/60">
