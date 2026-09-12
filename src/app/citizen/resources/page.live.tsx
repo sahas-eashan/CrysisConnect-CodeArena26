@@ -19,6 +19,16 @@ export default function CitizenResourcesPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(process.env.NEXT_PUBLIC_APPSYNC_GRAPHQL_URL));
   const [saving, setSaving] = useState(false);
+  const [selectedResourceName, setSelectedResourceName] = useState("");
+  const [customResourceName, setCustomResourceName] = useState("");
+  const resourceOptions = Array.from(
+    new Map(
+      resources
+        .filter((resource) => resource.name.trim())
+        .map((resource) => [resource.name.trim().toLowerCase(), resource])
+    ).values()
+  ).sort((left, right) => left.name.localeCompare(right.name));
+  const isOtherResource = selectedResourceName === "__other__";
 
   useEffect(() => {
     if (!hasAwsConfig) return;
@@ -79,13 +89,20 @@ export default function CitizenResourcesPage() {
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
-    const resourceName = String(form.get("resourceName") ?? "").trim();
+    const resourceName = (isOtherResource ? customResourceName : selectedResourceName).trim();
     const quantity = Number(form.get("quantity"));
     const urgency = String(form.get("urgency") ?? "normal");
     const matchedResource = resources.find((resource) => resource.name.trim().toLowerCase() === resourceName.toLowerCase());
 
+    if (!resourceName) {
+      setError("Choose an available essential or select Other and enter a custom resource name.");
+      setMessage(null);
+      return;
+    }
+
     if (!hasAwsConfig) {
       setMessage("Demo mode: resource request prepared locally. Connect AWS to save it in the backend.");
+      setError(null);
       return;
     }
 
@@ -117,6 +134,8 @@ export default function CitizenResourcesPage() {
 
       setRequests((current) => [createdRequest as ResourceRequest, ...current]);
       formElement.reset();
+      setSelectedResourceName("");
+      setCustomResourceName("");
       setMessage(`Resource request saved to the real backend. Request ID: ${createdRequest.id}`);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to save the resource request.");
@@ -167,7 +186,42 @@ export default function CitizenResourcesPage() {
           Ask for an existing item or request something that is not yet available in inventory.
         </CardDescription>
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
-          <Input name="resourceName" placeholder="Needed item" required />
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-white" htmlFor="resource-name">
+              Needed item
+            </label>
+            <select
+              className="flex h-11 w-full rounded-2xl border border-slate-800 bg-slate-950/60 px-4 text-sm text-white outline-none transition focus:border-primary"
+              id="resource-name"
+              required
+              value={selectedResourceName}
+              onChange={(event) => {
+                setSelectedResourceName(event.target.value);
+                if (event.target.value !== "__other__") {
+                  setCustomResourceName("");
+                }
+              }}
+            >
+              <option disabled hidden value="">
+                Select a resource
+              </option>
+              {resourceOptions.map((resource) => (
+                <option key={resource.id} value={resource.name}>
+                  {resource.name}
+                </option>
+              ))}
+              <option value="__other__">Other</option>
+            </select>
+          </div>
+          {isOtherResource ? (
+            <Input
+              name="customResourceName"
+              placeholder="Type custom resource name"
+              required
+              value={customResourceName}
+              onChange={(event) => setCustomResourceName(event.target.value)}
+            />
+          ) : null}
           <Input min={1} name="quantity" placeholder="Quantity needed" required type="number" />
           <select className="w-full rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm" name="urgency">
             <option value="normal">Normal urgency</option>
