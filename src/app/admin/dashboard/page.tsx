@@ -1,10 +1,13 @@
 import { StatCard } from "@/components/dashboard/stat-card";
+import { GovernmentAiConsole } from "@/components/ai/government-ai-console";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { mockDashboardStats, mockDisasters } from "@/lib/mock-data";
 
 export default function AdminDashboardPage() {
   return (
     <div className="space-y-6">
+      <GovernmentAiConsole disasterId={mockDisasters[0]?.id} />
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <StatCard label="Active disasters" value={mockDashboardStats.activeDisasters} helper="Live incidents under command" />
         <StatCard label="Pending SOS" value={mockDashboardStats.pendingSOS} helper="Needs responder allocation" />

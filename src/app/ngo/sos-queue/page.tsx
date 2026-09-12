@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { generateClient } from "aws-amplify/api";
 
+import { NgoSosAiAssist } from "@/components/ai/ngo-ai-assist";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { configureAmplify } from "@/lib/aws/amplify";
@@ -154,6 +155,8 @@ export default function NgoSOSQueuePage() {
 
   return (
     <div className="space-y-6">
+      <NgoSosAiAssist sosId={signals[0]?.id ?? mockSOSSignals[0].id} />
+
       <Card>
         <CardTitle>Live SOS queue</CardTitle>
         <CardDescription className="mt-2">

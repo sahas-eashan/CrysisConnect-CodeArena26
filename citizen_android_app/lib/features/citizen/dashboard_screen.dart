@@ -19,6 +19,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   late Future<DashboardBundle> _future;
+  late Future<CitizenAiGuidance> _guidanceFuture;
   final List<NewsUpdate> _liveNews = [];
   StreamSubscription<NewsUpdate>? _newsSubscription;
 
@@ -26,6 +27,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _future = widget.repository.loadDashboard();
+    _guidanceFuture = widget.repository.loadCitizenGuidance();
     _newsSubscription = widget.repository.subscribeToNews().listen((update) {
       if (!mounted) return;
       setState(() {
@@ -44,6 +46,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _refresh() async {
     setState(() {
       _future = widget.repository.loadDashboard();
+      _guidanceFuture = widget.repository.loadCitizenGuidance();
     });
     await _future;
   }
@@ -114,6 +117,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const SizedBox(height: 18),
               if (safeZone != null) _SafeZoneCard(zone: safeZone),
+              const SizedBox(height: 18),
+              FutureBuilder<CitizenAiGuidance>(
+                future: _guidanceFuture,
+                builder: (context, guidanceSnapshot) {
+                  final guidance = guidanceSnapshot.data;
+                  if (guidance == null) return const SizedBox.shrink();
+                  return _AiGuidanceCard(guidance: guidance);
+                },
+              ),
               const SizedBox(height: 22),
               _SectionHeader(
                 title: 'Active Disasters',
@@ -302,6 +314,65 @@ class _SafeZoneCard extends StatelessWidget {
                   .toList(),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _AiGuidanceCard extends StatelessWidget {
+  const _AiGuidanceCard({required this.guidance});
+
+  final CitizenAiGuidance guidance;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceLowest,
+        borderRadius: BorderRadius.circular(30),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _Pill(
+            label: 'AI Safety Guidance',
+            color: AppColors.primaryFixed,
+            textColor: AppColors.primary,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            guidance.title,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: AppColors.primary,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            guidance.guidance.english,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: AppColors.surfaceVariantText,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...guidance.nextSteps.map(
+            (step) => Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text('• $step'),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            guidance.meta.warnings.isEmpty
+                ? 'Human authorities remain the source of truth.'
+                : guidance.meta.warnings.first,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: AppColors.outline,
+            ),
+          ),
         ],
       ),
     );

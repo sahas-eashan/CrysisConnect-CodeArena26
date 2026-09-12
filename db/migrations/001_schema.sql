@@ -158,6 +158,27 @@ CREATE TABLE IF NOT EXISTS financial_aid (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS ai_audit_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  action TEXT NOT NULL,
+  role TEXT NOT NULL,
+  user_id TEXT REFERENCES profiles(id),
+  model TEXT NOT NULL,
+  status TEXT NOT NULL,
+  review_status TEXT DEFAULT 'pending_review',
+  confidence NUMERIC,
+  source_ids TEXT[] DEFAULT '{}',
+  warnings TEXT[] DEFAULT '{}',
+  blocked BOOLEAN DEFAULT false,
+  pii_detected BOOLEAN DEFAULT false,
+  prompt_injection_risk BOOLEAN DEFAULT false,
+  unsafe_content BOOLEAN DEFAULT false,
+  reasons TEXT[] DEFAULT '{}',
+  latency_ms INTEGER,
+  token_usage INTEGER,
+  created_at TIMESTAMPTZ DEFAULT now()
+ );
+
 CREATE INDEX IF NOT EXISTS idx_profiles_location ON profiles USING GIST (location);
 CREATE INDEX IF NOT EXISTS idx_disasters_affected_area ON disasters USING GIST (affected_area);
 CREATE INDEX IF NOT EXISTS idx_safe_zones_location ON safe_zones USING GIST (location);
@@ -166,3 +187,5 @@ CREATE INDEX IF NOT EXISTS idx_sos_location ON sos_signals USING GIST (location)
 CREATE INDEX IF NOT EXISTS idx_disasters_status ON disasters (status);
 CREATE INDEX IF NOT EXISTS idx_resource_requests_status ON resource_requests (status);
 CREATE INDEX IF NOT EXISTS idx_sos_status ON sos_signals (status);
+CREATE INDEX IF NOT EXISTS idx_ai_audit_logs_user_time ON ai_audit_logs (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_audit_logs_action_time ON ai_audit_logs (action, created_at DESC);

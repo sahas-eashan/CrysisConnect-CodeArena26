@@ -28,6 +28,17 @@ resource "aws_appsync_datasource" "lambda_resolver" {
   }
 }
 
+resource "aws_appsync_datasource" "lambda_ai" {
+  api_id           = aws_appsync_graphql_api.main.id
+  name             = "LambdaAi"
+  type             = "AWS_LAMBDA"
+  service_role_arn = aws_iam_role.appsync_lambda.arn
+
+  lambda_config {
+    function_arn = aws_lambda_function.ai.arn
+  }
+}
+
 locals {
   resolver_fields = {
     "Query.getDisasters"               = "Query"
@@ -88,4 +99,45 @@ EOF
 $util.toJson($context.result)
 EOF
 
+}
+
+locals {
+  ai_fields = {
+    "Query.getCitizenGuidance"            = "Query"
+    "Query.getAiAuditLogs"                = "Query"
+    "Mutation.generateIncidentBrief"      = "Mutation"
+    "Mutation.generateAlertDraft"         = "Mutation"
+    "Mutation.recommendOperations"        = "Mutation"
+    "Mutation.triageSosCase"              = "Mutation"
+    "Mutation.recommendResourceDispatch"  = "Mutation"
+    "Mutation.prepareSosSubmission"       = "Mutation"
+  }
+}
+
+resource "aws_appsync_resolver" "ai" {
+  for_each = local.ai_fields
+
+  api_id      = aws_appsync_graphql_api.main.id
+  type        = each.value
+  field       = split(".", each.key)[1]
+  data_source = aws_appsync_datasource.lambda_ai.name
+
+  request_template = <<EOF
+{
+  "version": "2018-05-29",
+  "operation": "Invoke",
+  "payload": {
+    "arguments": $util.toJson($context.arguments),
+    "identity": $util.toJson($context.identity),
+    "info": {
+      "fieldName": "${split(".", each.key)[1]}",
+      "parentTypeName": "${each.value}"
+    }
+  }
+}
+EOF
+
+  response_template = <<EOF
+$util.toJson($context.result)
+EOF
 }

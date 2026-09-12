@@ -121,6 +121,110 @@ type AlertResult {
   channel: String!
 }
 
+type AiAuditRef {
+  id: ID!
+  action: String!
+  model: String!
+  status: String!
+  createdAt: String!
+  reviewStatus: String
+}
+
+type AiRiskFlags {
+  blocked: Boolean!
+  piiDetected: Boolean!
+  promptInjectionRisk: Boolean!
+  unsafeContent: Boolean!
+  reasons: [String!]!
+}
+
+type AiDecisionRationale {
+  summary: String!
+  bullets: [String!]!
+}
+
+type AiRecommendation {
+  title: String!
+  detail: String!
+  priority: String!
+}
+
+type AiTranslationSet {
+  english: String!
+  sinhala: String!
+  tamil: String!
+}
+
+type AiResponseMeta {
+  status: String!
+  confidence: Float!
+  sourceIds: [String!]!
+  warnings: [String!]!
+  requiresHumanApproval: Boolean!
+  audit: AiAuditRef!
+  riskFlags: AiRiskFlags!
+}
+
+type IncidentBrief {
+  meta: AiResponseMeta!
+  headline: String!
+  summary: String!
+  rationale: AiDecisionRationale!
+  recommendations: [AiRecommendation!]!
+  translations: AiTranslationSet!
+}
+
+type AlertDraft {
+  meta: AiResponseMeta!
+  title: String!
+  channel: [String!]!
+  rationale: AiDecisionRationale!
+  english: String!
+  sinhala: String!
+  tamil: String!
+}
+
+type OperationsRecommendationSet {
+  meta: AiResponseMeta!
+  timeframe: String!
+  rationale: AiDecisionRationale!
+  recommendations: [AiRecommendation!]!
+}
+
+type SosTriage {
+  meta: AiResponseMeta!
+  sosId: ID
+  severity: String!
+  urgency: String!
+  responderIds: [String!]!
+  rationale: AiDecisionRationale!
+  recommendations: [AiRecommendation!]!
+}
+
+type ResourceDispatchPlan {
+  meta: AiResponseMeta!
+  requestId: ID
+  rationale: AiDecisionRationale!
+  recommendations: [AiRecommendation!]!
+}
+
+type CitizenGuidance {
+  meta: AiResponseMeta!
+  title: String!
+  safeZoneId: ID
+  resourceIds: [String!]!
+  nextSteps: [String!]!
+  guidance: AiTranslationSet!
+}
+
+type PreparedSosSubmission {
+  meta: AiResponseMeta!
+  original: String!
+  refined: String!
+  checklist: [String!]!
+  translations: AiTranslationSet!
+}
+
 type Query {
   getDisasters(status: String): [Disaster!]!
   getDisaster(id: ID!): Disaster
@@ -135,6 +239,8 @@ type Query {
   getNewsUpdates(disasterId: ID): [NewsUpdate!]!
   getOrganizations(status: String): [Organization!]!
   getDashboardStats: DashboardStats!
+  getCitizenGuidance(disasterId: ID): CitizenGuidance!
+  getAiAuditLogs(limit: Int): [AiAuditRef!]!
 }
 
 type Mutation {
@@ -153,6 +259,12 @@ type Mutation {
   sendAlert(input: AlertInput!): AlertResult!
   registerOrganization(input: OrgInput!): Organization!
   approveOrganization(id: ID!, approved: Boolean!): Organization!
+  generateIncidentBrief(disasterId: ID): IncidentBrief!
+  generateAlertDraft(input: AiAlertDraftInput!): AlertDraft!
+  recommendOperations(timeframe: String): OperationsRecommendationSet!
+  triageSosCase(id: ID!): SosTriage!
+  recommendResourceDispatch(id: ID!): ResourceDispatchPlan!
+  prepareSosSubmission(input: AiPrepareSosInput!): PreparedSosSubmission!
 }
 
 type Subscription {
@@ -233,4 +345,18 @@ input OrgInput {
   name: String!
   type: String
   description: String
+}
+
+input AiAlertDraftInput {
+  title: String!
+  body: String!
+  channel: [String!]!
+  targetArea: String
+  targetRoles: [String!]
+  disasterId: ID
+}
+
+input AiPrepareSosInput {
+  type: String!
+  description: String!
 }

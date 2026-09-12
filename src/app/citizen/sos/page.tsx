@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { generateClient } from "aws-amplify/api";
 
+import { CitizenSosCoach } from "@/components/ai/citizen-sos-coach";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,6 +19,8 @@ export default function CitizenSOSPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [sosType, setSosType] = useState("medical");
+  const [description, setDescription] = useState("");
   const { coordinates, error, loading, requestLocation } = useGeolocation();
 
   const geoJson = useMemo(() => {
@@ -83,6 +86,8 @@ export default function CitizenSOSPage() {
         },
         ...current
       ]);
+      setSosType("medical");
+      setDescription("");
       setMessage("Demo mode: SOS saved locally.");
       return;
     }
@@ -113,6 +118,8 @@ export default function CitizenSOSPage() {
 
       setSignals((current) => [createdSignal, ...current]);
       formElement.reset();
+      setSosType("medical");
+      setDescription("");
       setMessage("SOS saved to the real backend and sent for response.");
     } catch (submitErrorValue) {
       setSubmitError(submitErrorValue instanceof Error ? submitErrorValue.message : "Unable to save your SOS.");
@@ -123,7 +130,10 @@ export default function CitizenSOSPage() {
 
   return (
     <div className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
-      <Card className="border-danger/30">
+      <div className="space-y-6">
+        <CitizenSosCoach description={description} type={sosType} />
+
+        <Card className="border-danger/30">
         <CardTitle>Emergency SOS</CardTitle>
         <CardDescription className="mt-2">
           One tap to alert nearby responders. Your live coordinates are used for triage and safe-zone routing.
@@ -140,20 +150,31 @@ export default function CitizenSOSPage() {
         </div>
         {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
-          <select className="w-full rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm" name="type">
+          <select
+            className="w-full rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm"
+            name="type"
+            onChange={(event) => setSosType(event.target.value)}
+            value={sosType}
+          >
             <option value="medical">Medical emergency</option>
             <option value="trapped">Trapped or stranded</option>
             <option value="evacuation">Evacuation needed</option>
             <option value="resources">Urgent essentials needed</option>
           </select>
-          <Input name="description" placeholder="Describe the situation" />
+          <Input
+            name="description"
+            onChange={(event) => setDescription(event.target.value)}
+            placeholder="Describe the situation"
+            value={description}
+          />
           <Button className="w-full" disabled={saving} type="submit" variant="danger">
             {saving ? "Sending..." : "Send SOS"}
           </Button>
         </form>
         {message ? <p className="mt-4 text-sm text-muted">{message}</p> : null}
         {submitError ? <p className="mt-4 text-sm text-danger">{submitError}</p> : null}
-      </Card>
+        </Card>
+      </div>
 
       <Card>
         <CardTitle>Your SOS signals</CardTitle>

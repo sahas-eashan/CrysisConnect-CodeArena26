@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 
+import { CitizenGuidanceCard } from "@/components/ai/citizen-guidance-card";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,8 @@ export default function CitizenDashboardPage() {
 
   return (
     <div className="space-y-6">
+      <CitizenGuidanceCard disasterId={mockDisasters[0]?.id} />
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard helper="Currently affecting the region." label="Active disasters" value={mockDashboardStats.activeDisasters} />
         <StatCard helper="Responders and government users." label="Connected responders" value={184} />

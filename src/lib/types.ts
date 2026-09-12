@@ -123,6 +123,110 @@ export type AlertResult = {
   channel: string;
 };
 
+export type AiAuditRef = {
+  id: string;
+  action: string;
+  model: string;
+  status: string;
+  createdAt: string;
+  reviewStatus?: string | null;
+};
+
+export type AiRiskFlags = {
+  blocked: boolean;
+  piiDetected: boolean;
+  promptInjectionRisk: boolean;
+  unsafeContent: boolean;
+  reasons: string[];
+};
+
+export type AiDecisionRationale = {
+  summary: string;
+  bullets: string[];
+};
+
+export type AiRecommendation = {
+  title: string;
+  detail: string;
+  priority: string;
+};
+
+export type AiTranslationSet = {
+  english: string;
+  sinhala: string;
+  tamil: string;
+};
+
+export type AiResponseMeta = {
+  status: string;
+  confidence: number;
+  sourceIds: string[];
+  warnings: string[];
+  requiresHumanApproval: boolean;
+  audit: AiAuditRef;
+  riskFlags: AiRiskFlags;
+};
+
+export type IncidentBrief = {
+  meta: AiResponseMeta;
+  headline: string;
+  summary: string;
+  rationale: AiDecisionRationale;
+  recommendations: AiRecommendation[];
+  translations: AiTranslationSet;
+};
+
+export type AlertDraft = {
+  meta: AiResponseMeta;
+  title: string;
+  channel: string[];
+  rationale: AiDecisionRationale;
+  english: string;
+  sinhala: string;
+  tamil: string;
+};
+
+export type OperationsRecommendationSet = {
+  meta: AiResponseMeta;
+  timeframe: string;
+  rationale: AiDecisionRationale;
+  recommendations: AiRecommendation[];
+};
+
+export type SosTriage = {
+  meta: AiResponseMeta;
+  sosId?: string | null;
+  severity: string;
+  urgency: string;
+  responderIds: string[];
+  rationale: AiDecisionRationale;
+  recommendations: AiRecommendation[];
+};
+
+export type ResourceDispatchPlan = {
+  meta: AiResponseMeta;
+  requestId?: string | null;
+  rationale: AiDecisionRationale;
+  recommendations: AiRecommendation[];
+};
+
+export type CitizenGuidance = {
+  meta: AiResponseMeta;
+  title: string;
+  safeZoneId?: string | null;
+  resourceIds: string[];
+  nextSteps: string[];
+  guidance: AiTranslationSet;
+};
+
+export type PreparedSosSubmission = {
+  meta: AiResponseMeta;
+  original: string;
+  refined: string;
+  checklist: string[];
+  translations: AiTranslationSet;
+};
+
 export type MapMarker = {
   id: string;
   longitude: number;

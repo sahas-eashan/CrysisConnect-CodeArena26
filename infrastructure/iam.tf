@@ -36,7 +36,8 @@ resource "aws_iam_role_policy" "lambda_inline" {
           "lambda:InvokeFunction"
         ]
         Resource = [
-          aws_lambda_function.worker.arn
+          aws_lambda_function.worker.arn,
+          aws_lambda_function.ai.arn
         ]
       },
       {
@@ -100,7 +101,8 @@ resource "aws_iam_role_policy" "appsync_lambda" {
           "lambda:InvokeFunction"
         ]
         Resource = [
-          aws_lambda_function.resolver.arn
+          aws_lambda_function.resolver.arn,
+          aws_lambda_function.ai.arn
         ]
       }
     ]

@@ -45,6 +45,12 @@ data "archive_file" "worker_zip" {
   output_path = "${path.module}/build/worker.zip"
 }
 
+data "archive_file" "ai_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../lambda/ai"
+  output_path = "${path.module}/build/ai.zip"
+}
+
 resource "random_id" "suffix" {
   byte_length = 4
 }

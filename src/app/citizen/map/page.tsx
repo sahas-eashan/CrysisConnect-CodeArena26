@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { MapView, markersFromPoints } from "@/components/map/map-view";
@@ -35,7 +35,7 @@ function isPointInsidePolygon(
   return inside;
 }
 
-export default function CitizenMapPage() {
+function CitizenMapContent() {
   const searchParams = useSearchParams();
   const selectedSafeZoneId = searchParams.get("safeZone");
   const [userLocation, setUserLocation] = useState<{ longitude: number; latitude: number } | null>(null);
@@ -170,5 +170,13 @@ export default function CitizenMapPage() {
         ) : null}
       </div>
     </div>
+  );
+}
+
+export default function CitizenMapPage() {
+  return (
+    <Suspense fallback={<div className="space-y-6"><Card><CardTitle>Live disaster map</CardTitle><CardDescription className="mt-2">Loading map context...</CardDescription></Card></div>}>
+      <CitizenMapContent />
+    </Suspense>
   );
 }

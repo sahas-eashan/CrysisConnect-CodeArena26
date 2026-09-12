@@ -8,7 +8,8 @@ const items = [
   { href: "/admin/alerts", label: "Alerts" },
   { href: "/admin/resources", label: "Resources" },
   { href: "/admin/finance", label: "Finance" },
-  { href: "/admin/analytics", label: "Analytics" }
+  { href: "/admin/analytics", label: "Analytics" },
+  { href: "/admin/ai-oversight", label: "AI Oversight" }
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

@@ -172,6 +172,55 @@ export const queries = {
       }
     }
   `,
+  getCitizenGuidance: /* GraphQL */ `
+    query GetCitizenGuidance($disasterId: ID) {
+      getCitizenGuidance(disasterId: $disasterId) {
+        title
+        safeZoneId
+        resourceIds
+        nextSteps
+        guidance {
+          english
+          sinhala
+          tamil
+        }
+        meta {
+          status
+          confidence
+          sourceIds
+          warnings
+          requiresHumanApproval
+          audit {
+            id
+            action
+            model
+            status
+            createdAt
+            reviewStatus
+          }
+          riskFlags {
+            blocked
+            piiDetected
+            promptInjectionRisk
+            unsafeContent
+            reasons
+          }
+        }
+      }
+    }
+  `,
+  getAiAuditLogs: /* GraphQL */ `
+    query GetAiAuditLogs($limit: Int) {
+      getAiAuditLogs(limit: $limit) {
+        id
+        action
+        model
+        status
+        createdAt
+        reviewStatus
+      }
+    }
+  `,
   getNearestSafeZone: /* GraphQL */ `
     query GetNearestSafeZone($lat: Float!, $lon: Float!) {
       getNearestSafeZone(lat: $lat, lon: $lon) {
@@ -311,6 +360,240 @@ export const mutations = {
         id
         name
         approvalStatus
+      }
+    }
+  `,
+  generateIncidentBrief: /* GraphQL */ `
+    mutation GenerateIncidentBrief($disasterId: ID) {
+      generateIncidentBrief(disasterId: $disasterId) {
+        headline
+        summary
+        translations {
+          english
+          sinhala
+          tamil
+        }
+        rationale {
+          summary
+          bullets
+        }
+        recommendations {
+          title
+          detail
+          priority
+        }
+        meta {
+          status
+          confidence
+          sourceIds
+          warnings
+          requiresHumanApproval
+          audit {
+            id
+            action
+            model
+            status
+            createdAt
+            reviewStatus
+          }
+          riskFlags {
+            blocked
+            piiDetected
+            promptInjectionRisk
+            unsafeContent
+            reasons
+          }
+        }
+      }
+    }
+  `,
+  generateAlertDraft: /* GraphQL */ `
+    mutation GenerateAlertDraft($input: AiAlertDraftInput!) {
+      generateAlertDraft(input: $input) {
+        title
+        channel
+        english
+        sinhala
+        tamil
+        rationale {
+          summary
+          bullets
+        }
+        meta {
+          status
+          confidence
+          sourceIds
+          warnings
+          requiresHumanApproval
+          audit {
+            id
+            action
+            model
+            status
+            createdAt
+            reviewStatus
+          }
+          riskFlags {
+            blocked
+            piiDetected
+            promptInjectionRisk
+            unsafeContent
+            reasons
+          }
+        }
+      }
+    }
+  `,
+  recommendOperations: /* GraphQL */ `
+    mutation RecommendOperations($timeframe: String) {
+      recommendOperations(timeframe: $timeframe) {
+        timeframe
+        rationale {
+          summary
+          bullets
+        }
+        recommendations {
+          title
+          detail
+          priority
+        }
+        meta {
+          status
+          confidence
+          sourceIds
+          warnings
+          requiresHumanApproval
+          audit {
+            id
+            action
+            model
+            status
+            createdAt
+            reviewStatus
+          }
+          riskFlags {
+            blocked
+            piiDetected
+            promptInjectionRisk
+            unsafeContent
+            reasons
+          }
+        }
+      }
+    }
+  `,
+  triageSosCase: /* GraphQL */ `
+    mutation TriageSosCase($id: ID!) {
+      triageSosCase(id: $id) {
+        sosId
+        severity
+        urgency
+        responderIds
+        rationale {
+          summary
+          bullets
+        }
+        recommendations {
+          title
+          detail
+          priority
+        }
+        meta {
+          status
+          confidence
+          sourceIds
+          warnings
+          requiresHumanApproval
+          audit {
+            id
+            action
+            model
+            status
+            createdAt
+            reviewStatus
+          }
+          riskFlags {
+            blocked
+            piiDetected
+            promptInjectionRisk
+            unsafeContent
+            reasons
+          }
+        }
+      }
+    }
+  `,
+  recommendResourceDispatch: /* GraphQL */ `
+    mutation RecommendResourceDispatch($id: ID!) {
+      recommendResourceDispatch(id: $id) {
+        requestId
+        rationale {
+          summary
+          bullets
+        }
+        recommendations {
+          title
+          detail
+          priority
+        }
+        meta {
+          status
+          confidence
+          sourceIds
+          warnings
+          requiresHumanApproval
+          audit {
+            id
+            action
+            model
+            status
+            createdAt
+            reviewStatus
+          }
+          riskFlags {
+            blocked
+            piiDetected
+            promptInjectionRisk
+            unsafeContent
+            reasons
+          }
+        }
+      }
+    }
+  `,
+  prepareSosSubmission: /* GraphQL */ `
+    mutation PrepareSosSubmission($input: AiPrepareSosInput!) {
+      prepareSosSubmission(input: $input) {
+        original
+        refined
+        checklist
+        translations {
+          english
+          sinhala
+          tamil
+        }
+        meta {
+          status
+          confidence
+          sourceIds
+          warnings
+          requiresHumanApproval
+          audit {
+            id
+            action
+            model
+            status
+            createdAt
+            reviewStatus
+          }
+          riskFlags {
+            blocked
+            piiDetected
+            promptInjectionRisk
+            unsafeContent
+            reasons
+          }
+        }
       }
     }
   `

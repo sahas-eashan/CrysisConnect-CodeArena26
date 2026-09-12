@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { generateClient } from "aws-amplify/api";
 
+import { NgoResourceAiAssist } from "@/components/ai/ngo-ai-assist";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -258,8 +259,11 @@ export default function NgoResourcesPage() {
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[1fr_0.95fr]">
-      <Card>
+    <div className="space-y-6">
+      <NgoResourceAiAssist requestId={pendingRequests[0]?.id ?? mockResourceRequests[0].id} />
+
+      <div className="grid gap-6 xl:grid-cols-[1fr_0.95fr]">
+        <Card>
         <CardTitle>Manage field inventory</CardTitle>
         <CardDescription className="mt-2">
           Publish stock levels so citizens and government teams share the same operating picture.
@@ -325,9 +329,9 @@ export default function NgoResourcesPage() {
             ) : null}
           </div>
         </div>
-      </Card>
+        </Card>
 
-      <Card>
+        <Card>
         <CardTitle>Add or update a resource</CardTitle>
         <CardDescription className="mt-2">
           Fast updates from the field keep routing and allocation accurate.
@@ -385,7 +389,8 @@ export default function NgoResourcesPage() {
           </Button>
         </form>
         {message ? <p className="mt-4 text-sm text-success">{message}</p> : null}
-      </Card>
+        </Card>
+      </div>
     </div>
   );
 }

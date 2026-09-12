@@ -88,3 +88,9 @@ INSERT INTO financial_aid (id, disaster_id, amount, currency, source, allocated_
 VALUES
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '22222222-2222-2222-2222-222222222222', 1500000, 'LKR', 'Emergency Treasury Allocation', '11111111-1111-1111-1111-111111111111', 'allocated', 'Initial flood response budget.', 'gov-demo-1')
 ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO ai_audit_logs (id, action, role, user_id, model, status, review_status, confidence, source_ids, warnings, created_at)
+VALUES
+  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'generateIncidentBrief', 'government', 'gov-demo-1', 'gemini-2.5-pro', 'completed', 'approved', 0.84, ARRAY['22222222-2222-2222-2222-222222222222'], ARRAY['Human-reviewed in demo environment.'], now() - interval '15 minutes'),
+  ('cccccccc-cccc-cccc-cccc-cccccccccccc', 'triageSosCase', 'ngo', 'ngo-demo-1', 'gemini-2.5-flash', 'completed', 'pending_review', 0.80, ARRAY['88888888-8888-8888-8888-888888888888'], ARRAY['Responder assignment still requires operator confirmation.'], now() - interval '5 minutes')
+ON CONFLICT (id) DO NOTHING;

@@ -19,6 +19,8 @@ class _SosScreenState extends State<SosScreen> {
   final List<SosSignal> _liveSignals = [];
   String _selectedType = 'medical';
   final TextEditingController _descriptionController = TextEditingController();
+  PreparedSos? _preparedSos;
+  bool _preparing = false;
 
   @override
   void initState() {
@@ -74,6 +76,31 @@ class _SosScreenState extends State<SosScreen> {
           content: Text(error.toString().replaceFirst('Exception: ', '')),
         ),
       );
+    }
+  }
+
+  Future<void> _prepareWithAi() async {
+    if (_descriptionController.text.trim().isEmpty) return;
+
+    try {
+      setState(() => _preparing = true);
+      final prepared = await widget.repository.prepareSosSubmission(
+        type: _selectedType,
+        description: _descriptionController.text.trim(),
+      );
+      if (!mounted) return;
+      setState(() => _preparedSos = prepared);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _preparing = false);
+      }
     }
   }
 
@@ -222,6 +249,7 @@ class _SosScreenState extends State<SosScreen> {
               const SizedBox(height: 12),
               TextField(
                 controller: _descriptionController,
+                onChanged: (_) => setState(() => _preparedSos = null),
                 minLines: 3,
                 maxLines: 5,
                 decoration: const InputDecoration(
@@ -229,6 +257,17 @@ class _SosScreenState extends State<SosScreen> {
                   alignLabelWithHint: true,
                 ),
               ),
+              const SizedBox(height: 12),
+              OutlinedButton(
+                onPressed: _preparing ? null : _prepareWithAi,
+                child: Text(
+                  _preparing ? 'Preparing with AI...' : 'Prepare with AI',
+                ),
+              ),
+              if (_preparedSos != null) ...[
+                const SizedBox(height: 12),
+                _AiPreparedSosCard(result: _preparedSos!),
+              ],
               const SizedBox(height: 20),
               Text(
                 'My SOS Status',
@@ -331,6 +370,44 @@ class _ResponderStatusCard extends StatelessWidget {
       default:
         return 'Awaiting dispatch';
     }
+  }
+}
+
+class _AiPreparedSosCard extends StatelessWidget {
+  const _AiPreparedSosCard({required this.result});
+
+  final PreparedSos result;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceHighest,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'AI Prepared SOS Summary',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: AppColors.primary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(result.refined),
+          const SizedBox(height: 10),
+          ...result.checklist.map(
+            (item) => Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text('• $item'),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

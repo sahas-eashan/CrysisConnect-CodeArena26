@@ -56,3 +56,10 @@ variable "notification_sender_id" {
   type        = string
   default     = "CRISISAPP"
 }
+
+variable "gemini_api_key" {
+  description = "Gemini API key used by the AI orchestration lambda."
+  type        = string
+  sensitive   = true
+  default     = ""
+}

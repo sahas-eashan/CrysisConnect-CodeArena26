@@ -462,6 +462,159 @@ class NewsUpdate {
   final String? createdAt;
 }
 
+class AiAuditRef {
+  const AiAuditRef({
+    required this.id,
+    required this.action,
+    required this.model,
+    required this.status,
+    required this.createdAt,
+    this.reviewStatus,
+  });
+
+  factory AiAuditRef.fromJson(Map<String, dynamic> json) {
+    return AiAuditRef(
+      id: json['id'] as String? ?? '',
+      action: json['action'] as String? ?? '',
+      model: json['model'] as String? ?? '',
+      status: json['status'] as String? ?? '',
+      createdAt: json['createdAt'] as String? ?? '',
+      reviewStatus: json['reviewStatus'] as String?,
+    );
+  }
+
+  final String id;
+  final String action;
+  final String model;
+  final String status;
+  final String createdAt;
+  final String? reviewStatus;
+}
+
+class AiResponseMeta {
+  const AiResponseMeta({
+    required this.status,
+    required this.confidence,
+    required this.sourceIds,
+    required this.warnings,
+    required this.requiresHumanApproval,
+    required this.audit,
+  });
+
+  factory AiResponseMeta.fromJson(Map<String, dynamic> json) {
+    return AiResponseMeta(
+      status: json['status'] as String? ?? 'unknown',
+      confidence: (json['confidence'] as num?)?.toDouble() ?? 0,
+      sourceIds: (json['sourceIds'] as List<dynamic>? ?? const [])
+          .map((item) => item.toString())
+          .toList(),
+      warnings: (json['warnings'] as List<dynamic>? ?? const [])
+          .map((item) => item.toString())
+          .toList(),
+      requiresHumanApproval:
+          json['requiresHumanApproval'] as bool? ?? false,
+      audit: AiAuditRef.fromJson(
+        (json['audit'] as Map<String, dynamic>? ?? const {}),
+      ),
+    );
+  }
+
+  final String status;
+  final double confidence;
+  final List<String> sourceIds;
+  final List<String> warnings;
+  final bool requiresHumanApproval;
+  final AiAuditRef audit;
+}
+
+class CitizenAiGuidance {
+  const CitizenAiGuidance({
+    required this.title,
+    required this.nextSteps,
+    required this.guidance,
+    required this.meta,
+    this.safeZoneId,
+    this.resourceIds = const [],
+  });
+
+  factory CitizenAiGuidance.fromJson(Map<String, dynamic> json) {
+    final guidance = json['guidance'] as Map<String, dynamic>? ?? const {};
+    return CitizenAiGuidance(
+      title: json['title'] as String? ?? 'Safety guidance',
+      safeZoneId: json['safeZoneId'] as String?,
+      resourceIds: (json['resourceIds'] as List<dynamic>? ?? const [])
+          .map((item) => item.toString())
+          .toList(),
+      nextSteps: (json['nextSteps'] as List<dynamic>? ?? const [])
+          .map((item) => item.toString())
+          .toList(),
+      guidance: AiTranslationSet.fromJson(guidance),
+      meta: AiResponseMeta.fromJson(
+        (json['meta'] as Map<String, dynamic>? ?? const {}),
+      ),
+    );
+  }
+
+  final String title;
+  final String? safeZoneId;
+  final List<String> resourceIds;
+  final List<String> nextSteps;
+  final AiTranslationSet guidance;
+  final AiResponseMeta meta;
+}
+
+class PreparedSos {
+  const PreparedSos({
+    required this.original,
+    required this.refined,
+    required this.checklist,
+    required this.translations,
+    required this.meta,
+  });
+
+  factory PreparedSos.fromJson(Map<String, dynamic> json) {
+    return PreparedSos(
+      original: json['original'] as String? ?? '',
+      refined: json['refined'] as String? ?? '',
+      checklist: (json['checklist'] as List<dynamic>? ?? const [])
+          .map((item) => item.toString())
+          .toList(),
+      translations: AiTranslationSet.fromJson(
+        (json['translations'] as Map<String, dynamic>? ?? const {}),
+      ),
+      meta: AiResponseMeta.fromJson(
+        (json['meta'] as Map<String, dynamic>? ?? const {}),
+      ),
+    );
+  }
+
+  final String original;
+  final String refined;
+  final List<String> checklist;
+  final AiTranslationSet translations;
+  final AiResponseMeta meta;
+}
+
+class AiTranslationSet {
+  const AiTranslationSet({
+    required this.english,
+    required this.sinhala,
+    required this.tamil,
+  });
+
+  factory AiTranslationSet.fromJson(Map<String, dynamic> json) {
+    return AiTranslationSet(
+      english: json['english'] as String? ?? '',
+      sinhala: json['sinhala'] as String? ?? '',
+      tamil: json['tamil'] as String? ?? '',
+    );
+  }
+
+  final String english;
+  final String sinhala;
+  final String tamil;
+}
+
 class GeoJsonPoint {
   const GeoJsonPoint({required this.longitude, required this.latitude});
 
@@ -629,6 +782,37 @@ class AppGraphQL {
     }
   ''';
 
+  static const getCitizenGuidance = '''
+    query GetCitizenGuidance(\$disasterId: ID) {
+      getCitizenGuidance(disasterId: \$disasterId) {
+        title
+        safeZoneId
+        resourceIds
+        nextSteps
+        guidance {
+          english
+          sinhala
+          tamil
+        }
+        meta {
+          status
+          confidence
+          sourceIds
+          warnings
+          requiresHumanApproval
+          audit {
+            id
+            action
+            model
+            status
+            createdAt
+            reviewStatus
+          }
+        }
+      }
+    }
+  ''';
+
   static const getMyResourceRequests = '''
     query GetMyResourceRequests(\$status: String) {
       getMyResourceRequests(status: \$status) {
@@ -702,6 +886,36 @@ class AppGraphQL {
           fullName
           phone
           distance
+        }
+      }
+    }
+  ''';
+
+  static const prepareSosSubmission = '''
+    mutation PrepareSosSubmission(\$input: AiPrepareSosInput!) {
+      prepareSosSubmission(input: \$input) {
+        original
+        refined
+        checklist
+        translations {
+          english
+          sinhala
+          tamil
+        }
+        meta {
+          status
+          confidence
+          sourceIds
+          warnings
+          requiresHumanApproval
+          audit {
+            id
+            action
+            model
+            status
+            createdAt
+            reviewStatus
+          }
         }
       }
     }
@@ -1095,6 +1309,53 @@ class CitizenRepository {
     return _mapList(result, NewsUpdate.fromJson);
   }
 
+  Future<CitizenAiGuidance> loadCitizenGuidance({String? disasterId}) async {
+    try {
+      final result = await _backend.queryRoot(
+        AppGraphQL.getCitizenGuidance,
+        'getCitizenGuidance',
+        variables: {'disasterId': disasterId},
+      );
+      return CitizenAiGuidance.fromJson(result as Map<String, dynamic>);
+    } catch (_) {
+      return const CitizenAiGuidance(
+        title: 'Safety guidance for your area',
+        safeZoneId: null,
+        resourceIds: [],
+        nextSteps: [
+          'Move toward the nearest verified safe zone if travel is safe.',
+          'Avoid flooded roads and use bottled or boiled water only.',
+          'Keep your phone charged for live alerts.',
+        ],
+        guidance: AiTranslationSet(
+          english:
+              'Move toward the nearest verified safe zone if travel is safe.',
+          sinhala:
+              'ගමන් කිරීම ආරක්ෂිත නම් ආසන්නයේ ඇති සත්‍යාපිත ආරක්ෂිත ස්ථානය වෙත යන්න.',
+          tamil:
+              'பாதுகாப்பாக பயணம் செய்ய முடிந்தால் அருகிலுள்ள சரிபார்க்கப்பட்ட பாதுகாப்பு மையத்திற்குச் செல்லுங்கள்.',
+        ),
+        meta: AiResponseMeta(
+          status: 'fallback',
+          confidence: 0.76,
+          sourceIds: [],
+          warnings: [
+            'AI guidance is advisory. Follow official emergency instructions when they differ.',
+          ],
+          requiresHumanApproval: false,
+          audit: AiAuditRef(
+            id: 'mobile-fallback-guidance',
+            action: 'getCitizenGuidance',
+            model: 'fallback',
+            status: 'fallback',
+            createdAt: '',
+            reviewStatus: 'not_required',
+          ),
+        ),
+      );
+    }
+  }
+
   Future<ResourcesBundle> loadResourcesBundle() async {
     final results = await Future.wait<dynamic>([
       _backend.queryRoot(AppGraphQL.getResources, 'getResources'),
@@ -1183,6 +1444,54 @@ class CitizenRepository {
       ),
     );
     return SosSignal.fromJson(result as Map<String, dynamic>);
+  }
+
+  Future<PreparedSos> prepareSosSubmission({
+    required String type,
+    required String description,
+  }) async {
+    try {
+      final result = await _backend.mutateRoot(
+        AppGraphQL.prepareSosSubmission,
+        'prepareSosSubmission',
+        variables: {
+          'input': {'type': type, 'description': description},
+        },
+      );
+      return PreparedSos.fromJson(result as Map<String, dynamic>);
+    } catch (_) {
+      return PreparedSos(
+        original: description,
+        refined: '${type.toUpperCase()} emergency: $description',
+        checklist: const [
+          'Review the summary before sending.',
+          'Keep location services enabled.',
+          'Call emergency services directly if immediate danger escalates.',
+        ],
+        translations: AiTranslationSet(
+          english: '${type.toUpperCase()} emergency: $description',
+          sinhala: '${type.toUpperCase()} හදිසි තත්ත්වය: $description',
+          tamil: '${type.toUpperCase()} அவசரநிலை: $description',
+        ),
+        meta: const AiResponseMeta(
+          status: 'fallback',
+          confidence: 0.74,
+          sourceIds: [],
+          warnings: [
+            'Review the AI-prepared SOS before sending it to responders.',
+          ],
+          requiresHumanApproval: true,
+          audit: AiAuditRef(
+            id: 'mobile-fallback-sos',
+            action: 'prepareSosSubmission',
+            model: 'fallback',
+            status: 'fallback',
+            createdAt: '',
+            reviewStatus: 'pending_review',
+          ),
+        ),
+      );
+    }
   }
 
   Stream<NewsUpdate> subscribeToNews() {

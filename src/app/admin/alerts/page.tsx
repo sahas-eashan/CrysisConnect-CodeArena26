@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { generateClient } from "aws-amplify/api";
 
+import { AlertDraftAssistant } from "@/components/ai/alert-draft-assistant";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -76,8 +77,11 @@ export default function AdminAlertsPage() {
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
-      <Card>
+    <div className="space-y-6">
+      <AlertDraftAssistant />
+
+      <div className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
+        <Card>
         <CardTitle>Broadcast emergency alert</CardTitle>
         <CardDescription className="mt-2">
           Choose channels and affected roles. The backend geofences delivery based on the selected polygon.
@@ -112,9 +116,9 @@ export default function AdminAlertsPage() {
         </form>
         {error ? <p className="mt-4 text-sm text-red-200">{error}</p> : null}
         {message ? <p className="mt-4 text-sm text-success">{message}</p> : null}
-      </Card>
+        </Card>
 
-      <Card>
+        <Card>
         <CardTitle>Secondary disaster automation</CardTitle>
         <CardDescription className="mt-2">
           Rule-based warnings are generated automatically when certain disaster types are registered.
@@ -124,7 +128,8 @@ export default function AdminAlertsPage() {
           <li className="rounded-xl border border-slate-800 bg-slate-950/40 p-4">Flood {"->"} water contamination advisory</li>
           <li className="rounded-xl border border-slate-800 bg-slate-950/40 p-4">Drought {"->"} wildfire risk alert</li>
         </ul>
-      </Card>
+        </Card>
+      </div>
     </div>
   );
 }
